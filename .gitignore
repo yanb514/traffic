@@ -1,0 +1,12 @@
+data/*
+figures/*
+calibration_result/*
+simulation_result/*
+*.ipynb
+*.csv
+*.out.xml
+**/temp/
+/sumo/I24scenario/trajs_best.xml
+/sumo/I24scenario/trajs_gt.xml
+/sumo/on_ramp/trajs_best.xml
+/sumo/on_ramp/trajs_gt.xml

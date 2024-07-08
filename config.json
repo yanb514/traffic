@@ -1,0 +1,28 @@
+{
+    "ngsim": {
+        "dt": 0.1,
+        "data_path": "C:\\Users\\yanbing.wang\\Documents\\traffic\\data",
+        "file_name": "DATA (NO MOTORCYCLES).txt"
+    },
+
+    "result_path": "C:\\Users\\yanbing.wang\\Documents\\traffic\\calibration_result",
+    "model_param": {
+        "idm": {
+            "name": ["VMAX", "DSAFE", "TSAFE", "AMAX", "AMIN"],
+            "upper": [40, 10, 5, 5, 5],
+            "lower": [20, 0.01, 0.01, 0.01, 0.01]
+        },
+        "cthrv": {
+            "name": ["K1", "K2", "TAU"],
+            "upper": [2,2,5],
+            "lower": [0,0,0]
+        },
+        "ovrv": {
+            "name": ["ALPHA", "A", "HM", "B"],
+            "upper": [3.3,32,30,45],
+            "lower": [0.5,10,2,18]
+        }
+    }
+
+   
+}

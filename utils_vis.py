@@ -1,0 +1,367 @@
+import matplotlib.pyplot as plt
+import os
+import pandas as pd
+import xml.etree.ElementTree as ET
+import utils_data_read as reader
+import numpy as np
+
+# Path to your data file
+def scatter_time_space(data_path, file_name, highlight_leaders=False):
+    plt.rcParams.update({'font.size': 14})
+    data_file = os.path.join(data_path, file_name)
+    # Initialize variables to track the current vehicle's trajectory
+    times = []
+    positions = []
+    speeds = []
+    batch = 1000
+    plt.figure(figsize=(8,6))
+
+    # Read the data file line by line
+    cnt=0
+    with open(data_file, "r") as file:
+        next(file)
+        for line in file:
+            
+            # Split the line into columns
+            columns = line.strip().split()
+            # print(columns)
+            # Extract vehicle ID, Frame ID, and LocalY
+            # vehicle_id = columns[0]
+            time = float(columns[1]) #* 0.1
+            local_y = float(columns[3]) #% route_length
+            mean_speed = float(columns[4])
+
+            times.append(time)
+            positions.append(local_y)
+            speeds.append(mean_speed)
+
+            # Check if we encountered data for a new vehicle
+            if cnt>batch:
+                plt.scatter(times, positions, c=speeds, s=0.1,vmin=0, vmax=30)
+                # Start a new batch
+                times = []
+                positions = []
+                speeds = []
+                cnt =0
+
+            cnt+=1
+
+    # Add labels and legend
+    plt.colorbar(label='Mean Speed')
+    plt.xlabel("Time (sec)")
+    plt.ylabel("Position (m)")
+    plt.title("Time-space diagram")
+    
+
+    # go through the file a second time to plot the trip segments that don't have a leader
+    if highlight_leaders:
+        print("plotting no-leaders part")
+        time_no_leader = []
+        space_no_leader = []
+
+        with open(data_file, "r") as file:
+            for line in file:
+                # Split the line into columns
+                columns = line.strip().split()
+
+                # Extract vehicle ID, Frame ID, and LocalY
+                # leader_id = int(columns[9])
+                # if leader_id == -1:
+                vehicle_id = columns[0]
+                if vehicle_id == "1.1":
+                    time_no_leader.append(float(columns[1]) )
+                    space_no_leader.append(float(columns[3]))
+
+        plt.scatter(time_no_leader, space_no_leader, c="r", s=0.5,vmin=0, vmax=30)
+
+    # Show the plot
+    plt.tight_layout()
+    plt.show()
+    return
+
+
+def plot_time_space(data_path, file_name, highlight_leaders=False):
+    plt.rcParams.update({'font.size': 14})
+    
+    data_file = os.path.join(data_path, file_name)
+    # Initialize variables to track the current vehicle's trajectory
+    current_vehicle_id = None
+    current_trajectory = []
+
+    plt.figure(figsize=(16, 9))
+
+    # Read the data file line by line
+    with open(data_file, "r") as file:
+        next(file)
+        for line in file:
+            
+            # Split the line into columns
+            columns = line.strip().split()
+            # print(columns)
+            # Extract vehicle ID, Frame ID, and LocalY
+            vehicle_id = columns[0]
+            time = float(columns[1]) * 0.1
+            local_y = float(columns[3])
+            mean_speed = float(columns[4])
+
+            # Check if we encountered data for a new vehicle
+            if vehicle_id != current_vehicle_id:
+                # If so, plot the trajectory of the previous vehicle (if any)
+                if current_vehicle_id is not None:
+                    times, positions, speeds = zip(*current_trajectory)
+                    plt.scatter(times, positions, c=speeds, s=0.1)
+                
+                # Start a new trajectory for the current vehicle
+                current_vehicle_id = vehicle_id
+                current_trajectory = [(time, local_y, mean_speed)]
+            else:
+                # Continue adding to the current vehicle's trajectory
+                current_trajectory.append((time, local_y, mean_speed))
+
+            
+
+    # Plot the trajectory of the last encountered vehicle (if any)
+    if current_vehicle_id is not None:
+        times, positions, speeds = zip(*current_trajectory)
+        plt.scatter(times, positions, c=speeds, s=0.1)
+        
+    # Add labels and legend
+    # plt.colorbar(label='Mean Speed')
+    plt.xlabel("Time (sec)")
+    plt.ylabel("Position (m)")
+    plt.title("Time-space diagram")
+
+    # go through the file a second time to plot the trip segments that don't have a leader
+    if highlight_leaders:
+        print("plotting no-leaders part")
+        time_no_leader = []
+        space_no_leader = []
+
+        with open(data_file, "r") as file:
+            for line in file:
+                # Split the line into columns
+                columns = line.strip().split()
+
+                # Extract vehicle ID, Frame ID, and LocalY
+                leader_id = int(columns[9])
+                if leader_id == -1:
+                    time_no_leader.append(float(columns[1]) * 0.1)
+                    space_no_leader.append(float(columns[3]))
+
+        plt.scatter(time_no_leader, space_no_leader, c="r", s=0.5)
+
+    # Show the plot
+    plt.show()
+    return
+
+
+
+
+
+def plot_detector_data(xml_file, v=None, rho=None, q=None):
+    '''
+    plot the flow/density/speed relationship from xml_file (.out.xml)
+    v, rho, q are background equilibrium macro quantities, derived from IDM parameters
+    '''
+    try:
+        tree = ET.parse(xml_file)
+    except:
+        with open(xml_file, 'a') as file:
+            file.write("</detector>" + '\n')
+
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    data = {}
+    for interval in root.findall('interval'):
+        id_value = interval.get('id')
+        occupancy = float(interval.get('occupancy'))
+        flow = float(interval.get('flow'))
+        
+        if id_value not in data:
+            data[id_value] = {'occupancy': [], 'flow': []}
+        
+        data[id_value]['occupancy'].append(occupancy)
+        data[id_value]['flow'].append(flow)
+
+    plt.figure(figsize=(10, 6))
+    for id_value, values in data.items():
+        plt.scatter(values['occupancy'], values['flow'], label=id_value)
+
+    plt.xlabel('Occupancy (% of time the detector is occupied by vehicles during a given period)')
+    plt.ylabel('Flow (#vehicles/hour)')
+    plt.title('Detector Data')
+    plt.legend()
+    plt.show()
+
+def visualize_fcd(fcd_file, lanes=None):
+    # Parse the FCD XML file
+    tree = ET.parse(fcd_file)
+    root = tree.getroot()
+    
+    # Extract vehicle data
+    data = []
+    for timestep in root.findall('timestep'):
+        time = float(timestep.get('time'))
+        for vehicle in timestep.findall('vehicle'):
+            vehicle_id = vehicle.get('id')
+            lane = vehicle.get('lane')
+            x = float(vehicle.get('x'))
+            y = float(vehicle.get('y'))
+            speed = float(vehicle.get('speed'))
+            data.append([time, vehicle_id, lane, x, y, speed])
+    
+    # Create a DataFrame
+    df = pd.DataFrame(data, columns=['time', 'vehicle_id', 'lane', 'x', 'y', 'speed'])
+    
+    # Filter data for specific lanes if provided
+    if lanes is not None:
+        df = df[df['lane'].isin(lanes)]
+    
+    # Plot time-space diagrams
+    plt.figure(figsize=(15, 10))
+    
+    if lanes is None:
+        plt.title('Time-Space Diagram for All Lanes')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Position (m)')
+        scatter = plt.scatter(df['time'], df['x'], c=df['speed'], cmap='viridis', s=1)
+        cbar = plt.colorbar(scatter)
+        cbar.set_label('Speed (m/s)')
+    else:
+        # for lane in lanes:
+            # lane_data = df[df['lane'] == lane]
+        lane_data = df[df['lane'].isin(lanes)]
+        if not lane_data.empty:
+            # plt.subplot(len(lanes), 1, lanes.index(lane) + 1)
+            plt.title(f'Time-Space Diagram for Lane: {lane}')
+            plt.xlabel('Time (s)')
+            plt.ylabel('Position (m)')
+            scatter = plt.scatter(lane_data['time'], lane_data['x'], c=lane_data['speed'], cmap='viridis', s=1)
+            cbar = plt.colorbar(scatter)
+            cbar.set_label('Speed (m/s)')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_rds_vs_sim(rds_dir, sumo_dir, measurement_locations, quantity="volume"):
+    '''
+    rds_dir: directory for filtered RDS data
+    sumo_dir: directory for DETECTOR.out.xml files
+    measurement_locations a list of detectors
+    quantity: "volume", "speed" or "occupancy"
+    '''
+    # Read and extract data
+    # _dict: speed, volume, occupancy in a dictionary, each quantity is a matrix [N_det, N_time]
+    sim_dict = reader.extract_sim_meas(measurement_locations=measurement_locations, file_dir=sumo_dir)
+    rds_dict = reader.rds_to_matrix(rds_file=rds_dir, det_locations=measurement_locations)
+    unit_dict = {
+        "speed": "mph",
+        "volume": "nVeh/hr",
+        "occupancy": "%"
+    }
+    
+    start_time_rds = pd.Timestamp('00:00')  # Midnight
+    start_time_sim = pd.Timestamp('05:00')  # 5:00 AM
+    time_interval = 300  # seconds
+    
+    num_points_rds = len(rds_dict[quantity][0, :])
+    num_points_sim = len(sim_dict[quantity][0, :])-1
+    print(num_points_sim)
+    
+    # Create time indices for the x-axes
+    time_index_rds = pd.date_range(start=start_time_rds, periods=num_points_rds, freq=f'{time_interval}s')
+    time_index_sim = pd.date_range(start=start_time_sim, periods=num_points_sim, freq=f'{time_interval}s')
+
+    fig, axes = plt.subplots(nrows=5, ncols=5, figsize=(15, 15))
+    axes = axes.flatten()
+    for i, det in enumerate(measurement_locations):
+        
+        axes[i].plot(time_index_rds, rds_dict[quantity][i,:], c="blue", label="obs")
+        axes[i].plot(time_index_sim, sim_dict[quantity][i,:-1], c="orange", label="sim")
+        parts = det.split('_')
+        axes[i].set_title( f"MM{parts[0]}.{parts[1]} lane {int(parts[2])+1}")
+
+        # Format the x-axis
+        axes[i].xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
+        axes[i].xaxis.set_major_locator(plt.matplotlib.dates.HourLocator(interval=5))
+        axes[i].tick_params(axis='x', rotation=45)
+        axes[i].set_ylabel(unit_dict[quantity])
+
+
+    axes[0].legend()
+    plt.tight_layout()
+    plt.show()
+
+    return
+
+
+def plot_sim_vs_sim(sumo_dir, measurement_locations, quantity="volume"):
+    '''
+    rds_dir: directory for filtered RDS data
+    sumo_dir: directory for DETECTOR.out.xml files
+    measurement_locations a list of detectors
+    quantity: "volume", "speed" or "occupancy"
+    '''
+    # Read and extract data
+    # _dict: speed, volume, occupancy in a dictionary, each quantity is a matrix [N_det, N_time]
+    sim1_dict = reader.extract_sim_meas(measurement_locations=measurement_locations, file_dir=sumo_dir)
+    sim2_dict = reader.extract_sim_meas(measurement_locations=["trial_"+ location for location in measurement_locations], file_dir=sumo_dir)
+    unit_dict = {
+        "speed": "mph",
+        "volume": "nVeh/hr",
+        "occupancy": "%"
+    }
+    
+    start_time_rds = pd.Timestamp('00:00')  # Midnight
+    start_time_sim = pd.Timestamp('00:00')  # 5:00 AM
+    time_interval = 50  # seconds
+    
+    num_points_rds = len(sim1_dict[quantity][0, :])
+    num_points_sim = len(sim2_dict[quantity][0, :])
+    
+    # Create time indices for the x-axes
+    time_index_rds = pd.date_range(start=start_time_rds, periods=num_points_rds, freq=f'{time_interval}s')
+    time_index_sim = pd.date_range(start=start_time_sim, periods=num_points_sim, freq=f'{time_interval}s')
+
+    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(12, 10))
+    axes = axes.flatten()
+    for i, det in enumerate(measurement_locations):
+        
+        axes[i].plot(time_index_rds, sim1_dict[quantity][i,:], c="blue", label="ground truth")
+        axes[i].plot(time_index_sim, sim2_dict[quantity][i,:], c="orange", label="default")
+        err_abs = np.sum(np.abs(sim1_dict[quantity][i,:]-sim2_dict[quantity][i,:]))/len(sim1_dict[quantity][i,:])
+        parts = det.split('_')
+        title = "{} lane {}, abs.err {:.1f}".format(parts[0], int(parts[1])+1, err_abs)
+        print(title)
+        axes[i].set_title(title)
+
+        # Format the x-axis
+        axes[i].xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
+        axes[i].xaxis.set_major_locator(plt.matplotlib.dates.MinuteLocator(interval=2))
+        axes[i].tick_params(axis='x', rotation=45)
+        axes[i].set_ylabel(unit_dict[quantity])
+
+
+    axes[0].legend()
+    plt.tight_layout()
+    plt.show()
+
+    return
+
+
+if __name__ == "__main__":
+    # plot_detector_data("det_55_3_2.out.xml")
+    measurement_locations = [
+                            # '56_7_0', '56_7_1', '56_7_2', '56_7_3', '56_7_4', 
+                             '56_3_0', '56_3_1', '56_3_2', '56_3_3', '56_3_4',
+                             '56_0_0', '56_0_1', '56_0_2', '56_0_3', '56_0_4',
+                             '55_3_0', '55_3_1', '55_3_2', '55_3_3',
+                             '54_6_0', '54_6_1', '54_6_2', '54_6_3',
+                             '54_1_0', '54_1_1', '54_1_2', '54_1_3' ]
+    
+    rds_dir = r'C:\Users\yanbing.wang\Documents\traffic\data\RDS\I24_WB_52_60_11132023.csv'
+    sumo_dir = r'C:\Users\yanbing.wang\Documents\traffic\sumo\I24scenario'
+    plot_rds_vs_sim(rds_dir, sumo_dir, measurement_locations, quantity="volume")
+
