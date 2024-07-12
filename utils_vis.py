@@ -4,6 +4,8 @@ import pandas as pd
 import xml.etree.ElementTree as ET
 import utils_data_read as reader
 import numpy as np
+from collections import OrderedDict
+from matplotlib.ticker import FuncFormatter
 
 # Path to your data file
 def scatter_time_space(data_path, file_name, highlight_leaders=False):
@@ -296,55 +298,100 @@ def plot_rds_vs_sim(rds_dir, sumo_dir, measurement_locations, quantity="volume")
 
     return
 
+def format_yticks(y, pos):
+    if y >= 1000:
+        return f'{y / 1000:.1f}k'
+    else:
+        return f'{y:.0f}'
+
 
 def plot_sim_vs_sim(sumo_dir, measurement_locations, quantity="volume"):
     '''
-    rds_dir: directory for filtered RDS data
     sumo_dir: directory for DETECTOR.out.xml files
-    measurement_locations a list of detectors
+    measurement_locations: a list of detectors
     quantity: "volume", "speed" or "occupancy"
     '''
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = 18
+    formatter = FuncFormatter(format_yticks)
+
+
     # Read and extract data
-    # _dict: speed, volume, occupancy in a dictionary, each quantity is a matrix [N_det, N_time]
     sim1_dict = reader.extract_sim_meas(measurement_locations=measurement_locations, file_dir=sumo_dir)
-    sim2_dict = reader.extract_sim_meas(measurement_locations=["trial_"+ location for location in measurement_locations], file_dir=sumo_dir)
+    sim2_dict = reader.extract_sim_meas(measurement_locations=["trial_" + location for location in measurement_locations], file_dir=sumo_dir)
+    
     unit_dict = {
         "speed": "mph",
-        "volume": "nVeh/hr",
+        "volume": "nVeh / hr",
         "occupancy": "%"
     }
     
-    start_time_rds = pd.Timestamp('00:00')  # Midnight
-    start_time_sim = pd.Timestamp('00:00')  # 5:00 AM
-    time_interval = 50  # seconds
+    # start_time_rds = pd.Timestamp('00:00')  # Midnight
+    # start_time_sim = pd.Timestamp('00:00')  # Midnight
+    time_interval = 50  # seconds, set as detector frequency
     
     num_points_rds = len(sim1_dict[quantity][0, :])
-    num_points_sim = len(sim2_dict[quantity][0, :])
+    # num_points_sim = len(sim2_dict[quantity][0, :])
     
     # Create time indices for the x-axes
-    time_index_rds = pd.date_range(start=start_time_rds, periods=num_points_rds, freq=f'{time_interval}s')
-    time_index_sim = pd.date_range(start=start_time_sim, periods=num_points_sim, freq=f'{time_interval}s')
+    # time_index_rds = pd.date_range(start=start_time_rds, periods=num_points_rds, freq=f'{time_interval}s')
+    # time_index_sim = pd.date_range(start=start_time_sim, periods=num_points_sim, freq=f'{time_interval}s')
+    # Parse measurement locations to get lanes and detectors
+    lanes = sorted(set(int(location.split('_')[1]) for location in measurement_locations))
+    detectors = list(OrderedDict.fromkeys(location.split('_')[0] for location in measurement_locations))
+    print(detectors)
+    
+    # Create a grid of subplots
+    fig, axes = plt.subplots(nrows=len(lanes), ncols=len(detectors), figsize=(14, 10))
+    # Determine the y-axis range across all plots
+    y_min = 0
+    y_max = max(sim1_dict[quantity].max(), sim2_dict[quantity].max()) #+ 200
 
-    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(12, 10))
-    axes = axes.flatten()
-    for i, det in enumerate(measurement_locations):
-        
-        axes[i].plot(time_index_rds, sim1_dict[quantity][i,:], c="blue", label="ground truth")
-        axes[i].plot(time_index_sim, sim2_dict[quantity][i,:], c="orange", label="default")
-        err_abs = np.sum(np.abs(sim1_dict[quantity][i,:]-sim2_dict[quantity][i,:]))/len(sim1_dict[quantity][i,:])
-        parts = det.split('_')
-        title = "{} lane {}, abs.err {:.1f}".format(parts[0], int(parts[1])+1, err_abs)
-        print(title)
-        axes[i].set_title(title)
+    
+    for lane in lanes:
+        leftmost_idx = 99
+        for detector in detectors:
+            location = f"{detector}_{lane}"
+            if location in measurement_locations:
+                i = measurement_locations.index(location)
+                row = lanes.index(lane)
+                col = detectors.index(detector)
+                leftmost_idx = min(leftmost_idx, col)
+                ax = axes[row, col]
+                ax.plot(sim1_dict[quantity][i, :], 'go--', label="ground truth")
+                ax.plot(sim2_dict[quantity][i, :], 'rs--', label="default")
+                err_abs = np.sum(np.abs(sim1_dict[quantity][i, :] - sim2_dict[quantity][i, :])) / len(sim1_dict[quantity][i, :])
+                title = f"{detector.capitalize()} lane {lane + 1}"
+                ax.set_title(title, fontsize=22)
+                print(f"{detector} lane {lane + 1}, abs.err {err_abs:.1f}")
+                
+                
+                # Format the x-axis
+                # ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
+                # ax.xaxis.set_major_locator(plt.matplotlib.dates.MinuteLocator(interval=2))
+                # ax.tick_params(axis='x', rotation=45)
+                # Set the same y-axis range for all subplots
+                ax.set_ylim(y_min, y_max)
+                # ax.set_xlim(0-0.1, num_points_rds*time_interval/60+0.1)
+                ax.set_xlabel("Time (min)")
+                ax.set_xticks(range(0, num_points_rds, 2))
+                # 
 
-        # Format the x-axis
-        axes[i].xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
-        axes[i].xaxis.set_major_locator(plt.matplotlib.dates.MinuteLocator(interval=2))
-        axes[i].tick_params(axis='x', rotation=45)
-        axes[i].set_ylabel(unit_dict[quantity])
-
-
-    axes[0].legend()
+                
+            else:
+                # If there's no data for this detector-lane combination, turn off the subplot
+                fig.delaxes(axes[lanes.index(lane), detectors.index(detector)])
+          
+        for col_idx, _ax in enumerate(axes[row]):
+            if col_idx == leftmost_idx:
+                _ax.set_ylabel(unit_dict[quantity])
+                _ax.yaxis.set_tick_params(labelleft=True)
+                _ax.yaxis.set_major_formatter(formatter)
+            else:
+                _ax.set_yticklabels([])
+    
+    # Adjust layout
+    axes[0,1].legend()
     plt.tight_layout()
     plt.show()
 

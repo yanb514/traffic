@@ -5,6 +5,7 @@ simulation_result/*
 *.ipynb
 *.csv
 *.out.xml
+*.pkl
 **/temp/
 /sumo/I24scenario/trajs_best.xml
 /sumo/I24scenario/trajs_gt.xml

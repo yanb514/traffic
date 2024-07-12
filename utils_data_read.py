@@ -161,6 +161,50 @@ def extract_sim_meas(measurement_locations, file_dir = ""):
     return detector_data
 
 
+
+
+def parse_xml(xml_file):
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+    
+    data = []
+    for timestep in root.findall('timestep'):
+        for vehicle in timestep.findall('vehicle'):
+            vehicle_id = vehicle.get('id')
+            time = timestep.get('time')
+            lane_id = vehicle.get('lane')
+            local_y = vehicle.get('x', '-1')
+            mean_speed = vehicle.get('speed', '-1')
+            mean_accel = vehicle.get('accel', '-1')  # Assuming accel is mean acceleration
+            veh_length = vehicle.get('length', '-1')
+            veh_class = vehicle.get('type', '-1')
+            follower_id = vehicle.get('pos', '-1')  # Assuming pos is follower ID
+            leader_id = vehicle.get('slope', '-1')  # Assuming slope is leader ID
+            
+            row = [vehicle_id, time, lane_id, local_y, mean_speed, mean_accel, veh_length, veh_class, follower_id, leader_id]
+            # data.append([str(item) for item in row])
+            data.append([" ".join(str(num) for num in row)])
+    
+    return data
+
+# Function to write data to CSV
+def write_csv(data, csv_file):
+    with open(csv_file, 'w', newline='') as file:
+        writer = csv.writer(file)
+        # Write header
+        writer.writerow(['VehicleID', 'Time', 'LaneID', 'LocalY', 'MeanSpeed', 'MeanAccel', 'VehLength', 'VehClass', 'FollowerID', 'LeaderID'])
+        # Write rows
+        writer.writerows(data)
+
+
+
+def fcd_to_csv_byid(xml_file, csv_file):
+    print(f"parsing {xml_file}...")
+    data = parse_xml(xml_file)
+    print(f"writing {csv_file}...")
+    write_csv(data, csv_file)
+    return
+
 def vis_rds_lines(write_file_path):
     df = pd.read_csv(write_file_path)
 

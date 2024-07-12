@@ -19,7 +19,14 @@ def reorder_by_id(trajectory_file, bylane=False):
             # Split the line into columns
             # columns = line.strip().split()
             columns = line[0].strip().split()
-            curr_time = float(columns[1]) # int(columns[0])
+            # print(columns)
+            try:
+                curr_time = float(columns[1]) # int(columns[0])
+            except IndexError:
+                columns = columns[0].split(',')
+                # print(columns)
+                curr_time = float(columns[1]) 
+                
             if curr_time < prev_time:
                 print(trajectory_file + " is NOT ordered by time")
                 ordered_by_time = False
@@ -32,9 +39,10 @@ def reorder_by_id(trajectory_file, bylane=False):
         with open(trajectory_file, mode='r') as file:
             csv_reader = csv.reader(file)
             headers = next(csv_reader)
+            # print(csv_reader)
             rows = [row[0].strip().split() for row in csv_reader]
         # Sort the rows by vehicleID and then by time within each vehicleID
-        rows.sort(key=lambda x: (x[0], x[1]))
+        rows.sort(key=lambda x: (x[0], float(x[1])))
 
         if bylane:
             # Organize rows by laneID
@@ -80,13 +88,18 @@ def compute_macro(trajectory_file, dx, dt, save=False, plot=True):
             columns = line.strip().split()
             # print(columns, type(columns))
             vehicle_id = columns[0] # int(columns[0])
+           
             
             if first_line and not vehicle_id.isalpha(): # has all letters, then the first line is a header, skip it
                 print("skip the header")
                 first_line = False
                 continue
             # update boundaries
-            curr_time = float(columns[1]) #* 0.1
+            try:
+                curr_time = float(columns[1]) #* 0.1
+            except IndexError:
+                columns = columns[0].split(',')
+                curr_time = float(columns[1])
             curr_x = float(columns[3])
             start_x = min(start_x, curr_x)
             end_x = max(end_x, curr_x)
@@ -108,10 +121,15 @@ def compute_macro(trajectory_file, dx, dt, save=False, plot=True):
         for line in input_file:
             # Split the line into columns
             columns = line.strip().split()
-            # print(columns, type(columns))
+            if len(columns)==1:
+                columns = columns[0].split(',')
+
             vehicle_id = columns[0] # int(columns[0])
-            if first_line and not vehicle_id.isalpha(): # has all letters, then the first line is a header, skip it
+
+            # if first_line and not vehicle_id.isalpha(): # has all letters, then the first line is a header, skip it
+            if first_line and all(isinstance(item, str) for item in columns):
                 first_line = False
+                print("skip header")
                 continue
 
             # extract current info
@@ -126,22 +144,26 @@ def compute_macro(trajectory_file, dx, dt, save=False, plot=True):
                 grouped = data_index.groupby(['space_index', 'time_index'])
 
                 for (space, time), group_df in grouped:
+                    # print(space, time)
                     if (time >= 0 and time < (int(time_range / dt)) and space >= 0 and space < (int(space_range / dx))):
-                        TTD_matrix[int(time)][int(space)] += (group_df.p.max() - group_df.p.min())
-                        TTT_matrix[int(time)][int(space)] += (group_df.timestamps.max() - group_df.timestamps.min())
+                        
+                        TTD_matrix[int(time)][int(space)] += (group_df.p.max() - group_df.p.min()) # meter
+                        TTT_matrix[int(time)][int(space)] += (group_df.timestamps.max() - group_df.timestamps.min()) #sec
                 # break
                 traj = defaultdict(list)
             
-            
-            time = float(columns[1]) #* 0.1
+
+            time = float(columns[1]) #* 0.1#* 0.1
             foll_v_val = float(columns[4])
             foll_p_val = float(columns[3])
+
             # foll_a_val = float(columns[5])
             traj["timestamps"].append(time)
             traj["v"].append(foll_v_val)
             traj["p"].append(foll_p_val)
 
             prev_vehicle_id = vehicle_id
+            
 
     Q = TTD_matrix/(dx*dt)
     Rho = TTT_matrix/(dx*dt)
@@ -165,21 +187,23 @@ def plot_macro(macro_data, dx=10, dt=10):
     '''
     plot heatmap of Q, Rho and V in one plot
     '''
-    fig, axs = plt.subplots(1,3, figsize=(20, 5))
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = 18
+    fig, axs = plt.subplots(1,3, figsize=(17, 5))
     Q, Rho, V = macro_data["flow"], macro_data["density"], macro_data["speed"]
 
     # flow
-    h = axs[0].imshow(Q.T*3600, aspect='auto',vmin=0, vmax=2000) # convert veh/s to veh/hr
+    h = axs[0].imshow(Q.T*3600, aspect='auto',vmin=0, vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr
     colorbar = fig.colorbar(h, ax=axs[0])
     axs[0].set_title("Flow (veh/hr)")
 
     # density
-    h= axs[1].imshow(Rho.T*1000, aspect='auto',vmin=0, vmax=200) # convert veh/m to veh/km
+    h= axs[1].imshow(Rho.T*1000, aspect='auto',vmin=0, vmax=np.max(Rho.T*1000)) # 200 convert veh/m to veh/km
     colorbar = fig.colorbar(h, ax=axs[1])
     axs[1].set_title("Density (veh/km)")
 
     # speed
-    h = axs[2].imshow(V.T * 3.6, aspect='auto',vmin=0, vmax=110) # convert m/s to km/hr
+    h = axs[2].imshow(V.T * 3.6, aspect='auto',vmin=0, vmax=110) # 110 convert m/s to km/hr
     colorbar = fig.colorbar(h, ax=axs[2])
     axs[2].set_title("Speed (km/hr)")
 
@@ -190,16 +214,12 @@ def plot_macro(macro_data, dx=10, dt=10):
     for ax in axs:
         ax.invert_yaxis()
         xticks = ax.get_xticks()
-        # ax.set_xticklabels(xticks)
-        # ax.set_xticklabels([str(int(tick * xc)) for tick in xticks])
         ax.set_xticklabels(["{:.1f}".format(tick * xc) for tick in xticks])
-
-        # print(xticks)
-        # print([str(tick * xc) for tick in xticks])
         yticks = ax.get_yticks()
         ax.set_yticklabels([str(int(tick * yc)) for tick in yticks])
         ax.set_xlabel("Time (min)")
         ax.set_ylabel("Space (m)")
+    plt.tight_layout()
     plt.show()
 
 def compare_macro(macro_data_1, macro_data_2):
@@ -229,6 +249,7 @@ def compare_macro(macro_data_1, macro_data_2):
     xc = dt/60  # Example constant
     yc = dx
     for ax in axs:
+        ax.set_xlim([0,8])
         ax.invert_yaxis()
         xticks = ax.get_xticks()
         ax.set_xticklabels([str(int(tick * xc)) for tick in xticks])
