@@ -39,14 +39,6 @@ def training_rmse(exp_name):
     measurement_locations: a list of detectors
     quantity: "volume", "speed" or "occupancy"
     '''
-    # if "_q" in exp_name:
-    #     quantity = "volume"
-    # elif "_v" in exp_name:
-    #     quantity = "speed"
-    # elif "_rho" in exp_name:
-    #     quantity = "occupancy"
-
-    # density = (occupancy * 1000) / (vehicle_length + detector_length)
 
     # Read and extract data
     print("Training RMSE (detectors)")
@@ -90,6 +82,13 @@ def validation_rmse(exp_name):
 
     return
 
+def read_opt_result(result_pkl):
+    with open(result_pkl, 'rb') as file:
+        result = pickle.load(file)
+    print("Optimization result:", result)
+    print("Best parameters found:", result.x)
+    print("Objective function value at best parameters:", result.fun)
+    return
 
 if __name__ == "__main__":
 
@@ -99,10 +98,13 @@ if __name__ == "__main__":
                              'downstream_0', 'downstream_1']
     
     # ground truth detector data
-    sim1_dict = reader.extract_sim_meas(measurement_locations=measurement_locations, file_dir=sumo_dir)
+    # sim1_dict = reader.extract_sim_meas(measurement_locations=measurement_locations, file_dir=sumo_dir)
         
-    with open(exp["gt"], 'rb') as file:
-        macro_gt = pickle.load(file)
+    # with open(exp["gt"], 'rb') as file:
+    #     macro_gt = pickle.load(file)
 
-    training_rmse(None)
-    validation_rmse("default")
+    # training_rmse(None)
+    # validation_rmse("default")
+
+    result_pkl = r'C:\Users\yanbing.wang\Documents\traffic\sumo\on_ramp\optuna_studies\result.pkl'
+    read_opt_result(result_pkl)

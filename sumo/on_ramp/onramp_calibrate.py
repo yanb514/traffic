@@ -7,13 +7,40 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import sys
 import shutil
+import pickle
 
 main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')) # two levels up
 sys.path.insert(0, main_path)
-import utils_vis as vis
 import utils_data_read as reader
 import macro
 
+
+# ================ on-ramp scenario setup ====================
+SCENARIO = "onramp"
+EXP = "1a"
+sumo_dir = r'C:\Users\yanbing.wang\Documents\traffic\sumo\on_ramp'
+measurement_locations = ['upstream_0', 'upstream_1', 
+                            'merge_0', 'merge_1', 'merge_2', 
+                            'downstream_0', 'downstream_1']
+if "1" in EXP:
+    param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau']
+    min_val = [30.0, 1.0, 1.0, 1.0, 0.5]  
+    max_val = [35.0, 3.0, 4.0, 3.0, 2.0] 
+elif "2" in EXP:
+    param_names = ['lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain', 'lcKeepRight']
+    min_val = [0, 0, 0.0001, 0, 0]  
+    max_val = [5, 1, 5,      5, 5] 
+elif "3" in EXP:
+    param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau', 'lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain', 'lcKeepRight']
+    min_val = [30.0, 1.0, 1.0, 1.0, 0.5, 0, 0, 0.0001, 0, 0]  
+    max_val = [35.0, 3.0, 4.0, 3.0, 2.0, 5, 1, 5,      5, 5] 
+if "a" in EXP:
+    MEAS = "volume"
+elif "b" in EXP:
+    MEAS = "speed"
+elif "c" in EXP:
+    MEAS = "occupancy"
+# ================ on-ramp scenario ====================
 
 
 
@@ -242,69 +269,51 @@ def clear_directory(directory_path):
 
 if __name__ == "__main__":
 
-    # Measurement locations
-    # ================ on-ramp scenario ====================
-    SCENARIO = "onramp"
-    sumo_dir = r'C:\Users\yanbing.wang\Documents\traffic\sumo\on_ramp'
-    measurement_locations = ['upstream_0', 'upstream_1', 
-                             'merge_0', 'merge_1', 'merge_2', 
-                             'downstream_0', 'downstream_1']
+    # ================================= run default 
     default_params =  { "maxSpeed": 55.5, "minGap": 2.5, "accel": 2.6, "decel": 4.5, "tau": 1.0, "lcStrategic": 1.0, "lcCooperative": 1.0,"lcAssertive": 1, "lcSpeedGain": 1.0, "lcKeepRight": 1.0, "lcOvertakeRight": 0}
     update_sumo_configuration(default_params)
-
-    MEAS = "speed"
-    # param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau']
-    # min_val = [30.0, 1.0, 1.0, 1.0, 0.5]  
-    # max_val = [35.0, 3.0, 4.0, 3.0, 2.0] 
-    # param_names = ['lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain', 'lcKeepRight', 'lcOvertakeRight']
-    # min_val = [0, 0, 0.0001, 0, 0, 0]  
-    # max_val = [5, 1, 5,      5, 5, 1]   
-    param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau', 'lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain', 'lcKeepRight', 'lcOvertakeRight']
-    min_val = [30.0, 1.0, 1.0, 1.0, 0.5, 0, 0, 0.0001, 0, 0, 0]  
-    max_val = [35.0, 3.0, 4.0, 3.0, 2.0, 5, 1, 5,      5, 5, 1]   
-
+    run_sumo(sim_config=SCENARIO+"_gt.sumocfg") #, fcd_output ="trajs_gt.xml")
 
     # ================================= run ground truth and generate synthetic measurements
-    # run_sumo(sim_config=SCENARIO+"_gt.sumocfg") #, fcd_output ="trajs_gt.xml")
+    run_sumo(sim_config=SCENARIO+"_gt.sumocfg") #, fcd_output ="trajs_gt.xml")
     # vis.visualize_fcd("trajs_gt.xml") # lanes=["E0_0", "E0_1", "E1_0", "E1_1", "E2_0", "E2_1", "E2_2", "E4_0", "E4_1"]
-    # measured_output = reader.extract_sim_meas(measurement_locations)
+    measured_output = reader.extract_sim_meas(measurement_locations)
 
 
-    # # ================================= Create a study object and optimize the objective function
-    # clear_directory("temp")
-    # sampler = optuna.samplers.TPESampler(seed=10)
-    # study = optuna.create_study(direction='minimize', sampler=sampler)
-    # study.optimize(objective, n_trials=10000, n_jobs=16)
-    # fig = optuna.visualization.plot_optimization_history(study)
-    # fig.show()
+    # # =============================== Create a study object and optimize the objective function
+    clear_directory("temp")
+    sampler = optuna.samplers.TPESampler(seed=10)
+    pruner = optuna.pruners.SuccessiveHalvingPruner()
+    study = optuna.create_study(direction='minimize', sampler=sampler)
+    study.optimize(objective, n_trials=100, n_jobs=16)
+    fig = optuna.visualization.plot_optimization_history(study)
+    fig.show()
 
-    # # Get the best parameters
-    # best_params = study.best_params
-    # print('Best parameters:', best_params)
+    # Get the best parameters
+    best_params = study.best_params
+    print('Best parameters:', best_params)
+    with open(f'calibration_result/study_{EXP}.pkl', 'wb') as f:
+        pickle.dump(study, f)
+
 
     # # ================================ visualize time-space using best parameters
-    # best_params =  {'maxSpeed': 30.438177087377383, 'minGap': 2.7154211528218135, 'accel': 1.0969376713390915, 'decel': 2.1563832118867414, 'tau': 1.4505762714817776}
     # update_sumo_configuration(best_params)
     # run_sumo(sim_config=SCENARIO+".sumocfg")#, fcd_output ="trajs_best.xml")
     # vis.visualize_fcd("trajs_best.xml") # lanes=["E0_0", "E0_1", "E1_0", "E1_1", "E2_0", "E2_1", "E2_2", "E4_0", "E4_1"]
-
-    # run_sumo(sim_config=SCENARIO+".sumocfg")
     # sim_output = reader.extract_sim_meas(measurement_locations=["trial_"+ location for location in measurement_locations])
     
      
     # ================================= compare GT meas. vs. simulation with custom params.======================
-    # run_sumo(sim_config=SCENARIO+"_gt.sumocfg") #, fcd_output ="trajs_gt.xml")
     # best_params =  {'maxSpeed': 31.44813279984895, 'minGap': 1.8669305739182382, 'accel': 2.2398476082518677, 'decel': 2.5073714738472153, 'tau': 1.3988475504128757, 'lcStrategic': 0.8624217521963465, 'lcCooperative': 0.9789774143646455, 'lcAssertive': 0.43478229746049984, 'lcSpeedGain': 1.1383219615950644, 'lcKeepRight': 4.030227753894549, 'lcOvertakeRight': 0.9240310635518598}
-
     # update_sumo_configuration(best_params)
     # run_sumo(sim_config = SCENARIO+".sumocfg")
-    vis.plot_sim_vs_sim(sumo_dir, measurement_locations, quantity="speed")
+    # vis.plot_sim_vs_sim(sumo_dir, measurement_locations, quantity="speed")
     
-    # ============== compute macroscopic properties ==================
-    # base_name = SCENARIO+""
-    # fcd_name = "fcd_"+base_name+"_cflc_rho"
-    # run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
-    
-    # reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
-    # macro.reorder_by_id(fcd_name+".csv", bylane=False)
-    # macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=10, dt=10, save=True, plot=True)
+    # ============== compute & save macroscopic properties ==================
+    update_sumo_configuration(best_params)
+    base_name = SCENARIO+""
+    fcd_name = "fcd_"+base_name+"_"+EXP
+    run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
+    reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
+    macro.reorder_by_id(fcd_name+".csv", bylane=False)
+    macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=10, dt=10, save=True, plot=True)

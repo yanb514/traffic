@@ -58,7 +58,7 @@ def read_and_filter_file(file_path, write_file_path, startmile, endmile):
                     writer.writerow(selected_row)
 
 
-def rds_to_matrix(rds_file, det_locations):
+def rds_to_matrix(rds_file, det_locations ):
     '''
     Read RDS data from a CSV file and output a matrix of [N_dec, N_time] size,
     where N_dec is the number of detectors and N_time is the number of aggregated
@@ -126,6 +126,7 @@ def extract_sim_meas(measurement_locations, file_dir = ""):
 
     for detector_id in measurement_locations:
         # Construct the filename for the detector's output XML file
+        # print(f"reading {detector_id}...")
         filename = os.path.join(file_dir, f"det_{detector_id}.out.xml")
         
         # Check if the file exists
@@ -159,6 +160,10 @@ def extract_sim_meas(measurement_locations, file_dir = ""):
         # print(val.shape)
     
     return detector_data
+
+
+
+
 
 
 

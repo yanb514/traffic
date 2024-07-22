@@ -6,6 +6,8 @@ import utils_data_read as reader
 import numpy as np
 from collections import OrderedDict
 from matplotlib.ticker import FuncFormatter
+import seaborn as sns
+import matplotlib.dates as mdates
 
 # Path to your data file
 def scatter_time_space(data_path, file_name, highlight_leaders=False):
@@ -395,6 +397,88 @@ def plot_sim_vs_sim(sumo_dir, measurement_locations, quantity="volume"):
     plt.tight_layout()
     plt.show()
 
+    return
+
+
+def read_asm(asm_file):
+
+    # Initialize an empty DataFrame to store the aggregated results
+    aggregated_data = pd.DataFrame()
+
+    # Define a function to process each chunk
+    def process_chunk(chunk):
+        # Calculate aggregated volume, occupancy, and speed for each row
+        chunk['total_volume'] = chunk[['lane1_volume', 'lane2_volume', 'lane3_volume', 'lane4_volume']].sum(axis=1)*120 # convert from veh/30s to veh/hr
+        chunk['total_occ'] = chunk[['lane1_occ',  'lane2_occ','lane3_occ',  'lane4_occ']].mean(axis=1)
+        chunk['total_speed'] = chunk[['lane1_speed',  'lane2_speed', 'lane3_speed','lane4_speed']].mean(axis=1)
+        return chunk[['unix_time', 'milemarker', 'total_volume', 'total_occ', 'total_speed']]
+
+    # Read the CSV file in chunks and process each chunk
+    chunk_size = 10000  # Adjust the chunk size based on your memory capacity
+    for chunk in pd.read_csv(asm_file, chunksize=chunk_size):
+        processed_chunk = process_chunk(chunk)
+        aggregated_data = pd.concat([aggregated_data, processed_chunk], ignore_index=True)
+
+    # Define the range of mile markers to plot
+    milemarker_min = 53
+    milemarker_max = 57
+    start_time = aggregated_data['unix_time'].min()
+    end_time = start_time + 3*3600 # only select the first 3 hours
+
+    # Filter milemarker within the specified range
+    filtered_data = aggregated_data[
+        (aggregated_data['milemarker'] >= milemarker_min) &
+        (aggregated_data['milemarker'] <= milemarker_max) &
+        (aggregated_data['unix_time'] >= start_time) &
+        (aggregated_data['unix_time'] <= end_time)
+    ]
+    # Convert unix_time to datetime if needed and extract hour (UTC to Central time)
+    filtered_data['unix_time'] = pd.to_datetime(filtered_data['unix_time'], unit='s') - pd.Timedelta(hours=5)
+
+    # Pivot the data for heatmaps
+    volume_pivot = filtered_data.pivot(index='milemarker', columns='unix_time', values='total_volume')
+    occ_pivot = filtered_data.pivot(index='milemarker', columns='unix_time', values='total_occ')
+    speed_pivot = filtered_data.pivot(index='milemarker', columns='unix_time', values='total_speed')
+
+    # Generate y-ticks based on the range of mile markers
+    # yticks = range(milemarker_min, milemarker_max + 1)
+
+    # Plot the heatmaps
+    plt.figure(figsize=(15, 5))
+
+    plt.subplot(1, 3, 1)
+    sns.heatmap(volume_pivot, cmap='viridis', cbar_kws={'label': 'Volume'}) # convert from 
+    plt.title('Volume (nVeh/hr)')
+    plt.xlabel('Time (hour of day)')
+    plt.ylabel('Milemarker')
+    # plt.yticks(ticks=yticks, labels=yticks)
+    plt.xticks(rotation=45)
+
+    plt.subplot(1, 3, 2)
+    sns.heatmap(occ_pivot, cmap='viridis', cbar_kws={'label': 'Occupancy'})
+    plt.title('Occupancy (%)')
+    plt.xlabel('Time (hour of day)')
+    plt.ylabel('Milemarker')
+    # plt.yticks(ticks=yticks, labels=yticks)
+    plt.xticks(rotation=45)
+
+    plt.subplot(1, 3, 3)
+    sns.heatmap(speed_pivot, cmap='viridis', cbar_kws={'label': 'Speed'})
+    plt.title('Speed (mph)')
+    plt.xlabel('Time (hour of day)')
+    plt.ylabel('Milemarker')
+    # plt.yticks(ticks=yticks, labels=yticks)
+    plt.xticks(rotation=45)
+
+    # Adjust x-axis labels to show integer hours
+    for ax in plt.gcf().axes:
+        # Format the x-axis
+        x_labels = ax.get_xticks()
+        new_labels = [pd.to_datetime(volume_pivot.columns[int(l)]).strftime('%H') for l in x_labels if l >= 0 and l < len(volume_pivot.columns)]
+        ax.set_xticklabels(new_labels)
+
+    plt.tight_layout()
+    plt.show()
     return
 
 

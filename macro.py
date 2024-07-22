@@ -203,9 +203,9 @@ def plot_macro(macro_data, dx=10, dt=10):
     axs[1].set_title("Density (veh/km)")
 
     # speed
-    h = axs[2].imshow(V.T * 3.6, aspect='auto',vmin=0, vmax=110) # 110 convert m/s to km/hr
+    h = axs[2].imshow(V.T * 2.23694, aspect='auto',vmin=0, vmax=110) # 110 convert m/s to mph
     colorbar = fig.colorbar(h, ax=axs[2])
-    axs[2].set_title("Speed (km/hr)")
+    axs[2].set_title("Speed (mph)")
 
 
     # Multiply x-axis ticks by a constant
