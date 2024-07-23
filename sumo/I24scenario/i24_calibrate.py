@@ -8,6 +8,8 @@ import numpy as np
 import sys
 import shutil
 import pickle
+import logging
+from datetime import datetime
 
 main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')) # two levels up
 sys.path.insert(0, main_path)
@@ -17,7 +19,7 @@ import macro
 
 # ================ I24 scenario ====================
 SCENARIO = "I24_scenario"
-EXP = "1a"
+EXP = "1b"
 sumo_dir = r'C:\Users\yanbing.wang\Documents\traffic\sumo\I24scenario'
 measurement_locations = [
                         # '56_7_0', '56_7_1', '56_7_2', '56_7_3', '56_7_4', 
@@ -31,19 +33,20 @@ if "1" in EXP:
     min_val = [30.0, 1.0, 1.0, 1.0, 0.5]  
     max_val = [35.0, 3.0, 4.0, 3.0, 2.0] 
 elif "2" in EXP:
-    param_names = ['lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain', 'lcKeepRight']
-    min_val = [0, 0, 0.0001, 0, 0]  
-    max_val = [5, 1, 5,      5, 5] 
+    param_names = ['lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain']
+    min_val = [0, 0, 0.0001, 0]  
+    max_val = [5, 1, 5,      5] 
 elif "3" in EXP:
-    param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau', 'lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain', 'lcKeepRight']
-    min_val = [30.0, 1.0, 1.0, 1.0, 0.5, 0, 0, 0.0001, 0, 0]  
-    max_val = [35.0, 3.0, 4.0, 3.0, 2.0, 5, 1, 5,      5, 5] 
+    param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau', 'lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain']
+    min_val = [30.0, 1.0, 1.0, 1.0, 0.5, 0, 0, 0.0001, 0]  
+    max_val = [35.0, 3.0, 4.0, 3.0, 2.0, 5, 1, 5,      5] 
 if "a" in EXP:
     MEAS = "volume"
 elif "b" in EXP:
     MEAS = "speed"
 elif "c" in EXP:
     MEAS = "occupancy"
+
 
 
 
@@ -168,13 +171,33 @@ def objective(trial):
     # Align time
     # TODO: SIMULATED_OUTPUT starts at 5AM-8AM, while measured_output is 0-24, both in 5min intervals
     start_idx = 60 #int(5*60/5)
-    end_idx = start_idx + simulated_output[MEAS].shape[1]
+    end_idx = min(simulated_output[MEAS].shape[1], 36)
+    end_idx_rds = start_idx + end_idx # at most three hours of simulated measurements
     
     # Calculate the objective function value
-    error = np.linalg.norm(simulated_output[MEAS][:,:-1] - measured_output[MEAS][:, start_idx: end_idx-1])
-    clear_directory(os.path.join("temp", str(trial.number)))
+    diff = simulated_output[MEAS][:,:end_idx] - measured_output[MEAS][:, start_idx: end_idx_rds] # measured output may have nans
+    mask = ~np.isnan(diff)
+
+    # Replace NaNs with 0 in the matrix for norm calculation
+    matrix_no_nan = np.where(mask, diff, 0)
+    error = np.linalg.norm(matrix_no_nan)
+
+    # clear_directory(os.path.join("temp", str(trial.number)))
+    logging.info(f'Trial {trial.number}: param={driver_param}, error={error}')
     
     return error
+
+def logging_callback(study, trial):
+    if trial.state == optuna.trial.TrialState.COMPLETE:
+        logging.info(f'Trial {trial.number} succeeded: value={trial.value}, params={trial.params}')
+    elif trial.state == optuna.trial.TrialState.FAIL:
+        logging.error(f'Trial {trial.number} failed: exception={trial.user_attrs.get("exception")}')
+    
+    if study.best_trial.number == trial.number:
+        logging.info(f'Current Best Trial: {study.best_trial.number}')
+        logging.info(f'Current Best Value: {study.best_value}')
+        logging.info(f'Current Best Parameters: {study.best_params}')
+
 
 def clear_directory(directory_path):
     """
@@ -197,25 +220,28 @@ if __name__ == "__main__":
 
     # ================================= get RDS data
     rds_dir = r'C:\Users\yanbing.wang\Documents\traffic\data\RDS\I24_WB_52_60_11132023.csv'
-    # measured_output = reader.rds_to_matrix(rds_file=rds_dir, det_locations=measurement_locations)
+    measured_output = reader.rds_to_matrix(rds_file=rds_dir, det_locations=measurement_locations)
 
     # # ================================= run default 
-    # default_params =  { "maxSpeed": 55.5, "minGap": 2.5, "accel": 2.6, "decel": 4.5, "tau": 1.0, "lcStrategic": 1.0, "lcCooperative": 1.0,"lcAssertive": 1, "lcSpeedGain": 1.0, "lcKeepRight": 1.0, "lcOvertakeRight": 0}
+    # default_params =  {'maxSpeed': 34.621487807245266, 'minGap': 2.955022475567193, 'accel': 1.8870921770516491, 'decel': 1.079848523770033, 'tau': 1.8321915203666037} # failed
     # update_sumo_configuration(default_params)
 
-    # # # ================================= Create a study object and optimize the objective function
-    # clear_directory("temp")
-    # sampler = optuna.samplers.TPESampler(seed=10)
-    # study = optuna.create_study(direction='minimize', sampler=sampler)
-    # study.optimize(objective, n_trials=5000, n_jobs=16)
-    # fig = optuna.visualization.plot_optimization_history(study)
-    # fig.show()
+    # # ================================= Create a study object and optimize the objective function
+    clear_directory("temp")
+    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    logging.basicConfig(filename=f'{current_time}_optuna_log_{EXP}.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
 
-    # # Get the best parameters
-    # best_params = study.best_params
-    # print('Best parameters:', best_params)
-    # with open(f'calibration_result/study_{EXP}.pkl', 'wb') as f:
-    #     pickle.dump(study, f)
+    sampler = optuna.samplers.TPESampler(seed=10)
+    study = optuna.create_study(direction='minimize', sampler=sampler)
+    study.optimize(objective, n_trials=5000, n_jobs=16, callbacks=[logging_callback])
+    fig = optuna.visualization.plot_optimization_history(study)
+    fig.show()
+
+    # Get the best parameters
+    best_params = study.best_params
+    print('Best parameters:', best_params)
+    with open(f'calibration_result/study_{EXP}.pkl', 'wb') as f:
+        pickle.dump(study, f)
 
     # # # ================================ visualize time-space using best parameters
     # # best_params = {'maxSpeed': 30.804432612968196, 'minGap': 1.0083914605690099, 'accel': 2.257037304221662, 'decel': 2.2567041506643815, 'tau': 1.3447978212672462}
@@ -225,14 +251,15 @@ if __name__ == "__main__":
 
     # # ============== compute & save macroscopic properties ==================
     # update_sumo_configuration(best_params)
-    base_name = SCENARIO+""
-    fcd_name = "fcd_"+base_name+"_"+EXP
-    run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
-    reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
-    macro.reorder_by_id(fcd_name+".csv", bylane=False)
-    macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=482.803, dt=30, save=True, plot=True)
+    # base_name = SCENARIO+""
+    # fcd_name = "fcd_"+base_name+"_"+EXP
+    # run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
+    # reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
+    # macro.reorder_by_id(fcd_name+".csv", bylane=False)
+    # macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=482.803, dt=30, save=True, plot=True)
 
 
-    vis.plot_rds_vs_sim(rds_dir, sumo_dir, measurement_locations, quantity="speed")
+    # vis.plot_rds_vs_sim(rds_dir, sumo_dir, measurement_locations, quantity="speed")
     # asm_file = "2023-11-13-ASM.csv"
     # vis.read_asm(asm_file)
+    # vis.scatter_fcd_i24(fcd_name+".out.xml")

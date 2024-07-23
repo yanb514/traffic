@@ -8,11 +8,14 @@ import numpy as np
 import sys
 import shutil
 import pickle
+import logging
+from datetime import datetime
 
 main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')) # two levels up
 sys.path.insert(0, main_path)
 import utils_data_read as reader
 import macro
+import utils_vis as vis
 
 
 # ================ on-ramp scenario setup ====================
@@ -41,6 +44,9 @@ elif "b" in EXP:
 elif "c" in EXP:
     MEAS = "occupancy"
 # ================ on-ramp scenario ====================
+# Configure the logging module
+current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+logging.basicConfig(filename=f'{current_time}_optuna_log_{EXP}.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
 
 
 
@@ -248,8 +254,21 @@ def objective(trial):
     error = np.linalg.norm(simulated_output[MEAS] - measured_output[MEAS])
     
     clear_directory(os.path.join("temp", str(trial.number)))
+    logging.info(f'Trial {trial.number}: param={driver_param}, error={error}')
     
     return error
+
+
+def logging_callback(study, trial):
+    if trial.state == optuna.trial.TrialState.COMPLETE:
+        logging.info(f'Trial {trial.number} succeeded: value={trial.value}, params={trial.params}')
+    elif trial.state == optuna.trial.TrialState.FAIL:
+        logging.error(f'Trial {trial.number} failed: exception={trial.user_attrs.get("exception")}')
+    
+    if study.best_trial.number == trial.number:
+        logging.info(f'Current Best Trial: {study.best_trial.number}')
+        logging.info(f'Current Best Value: {study.best_value}')
+        logging.info(f'Current Best Parameters: {study.best_params}')
 
 def clear_directory(directory_path):
     """
@@ -272,20 +291,20 @@ if __name__ == "__main__":
     # ================================= run default 
     default_params =  { "maxSpeed": 55.5, "minGap": 2.5, "accel": 2.6, "decel": 4.5, "tau": 1.0, "lcStrategic": 1.0, "lcCooperative": 1.0,"lcAssertive": 1, "lcSpeedGain": 1.0, "lcKeepRight": 1.0, "lcOvertakeRight": 0}
     update_sumo_configuration(default_params)
-    run_sumo(sim_config=SCENARIO+"_gt.sumocfg") #, fcd_output ="trajs_gt.xml")
+    # run_sumo(sim_config=SCENARIO+"_gt.sumocfg") #, fcd_output ="trajs_gt.xml")
 
     # ================================= run ground truth and generate synthetic measurements
-    run_sumo(sim_config=SCENARIO+"_gt.sumocfg") #, fcd_output ="trajs_gt.xml")
+    # run_sumo(sim_config=SCENARIO+"_gt.sumocfg") #, fcd_output ="trajs_gt.xml")
     # vis.visualize_fcd("trajs_gt.xml") # lanes=["E0_0", "E0_1", "E1_0", "E1_1", "E2_0", "E2_1", "E2_2", "E4_0", "E4_1"]
     measured_output = reader.extract_sim_meas(measurement_locations)
 
 
-    # # =============================== Create a study object and optimize the objective function
+    # =============================== Create a study object and optimize the objective function
     clear_directory("temp")
     sampler = optuna.samplers.TPESampler(seed=10)
     pruner = optuna.pruners.SuccessiveHalvingPruner()
     study = optuna.create_study(direction='minimize', sampler=sampler)
-    study.optimize(objective, n_trials=100, n_jobs=16)
+    study.optimize(objective, n_trials=100, n_jobs=16, callbacks=[logging_callback])
     fig = optuna.visualization.plot_optimization_history(study)
     fig.show()
 
@@ -310,10 +329,12 @@ if __name__ == "__main__":
     # vis.plot_sim_vs_sim(sumo_dir, measurement_locations, quantity="speed")
     
     # ============== compute & save macroscopic properties ==================
-    update_sumo_configuration(best_params)
-    base_name = SCENARIO+""
-    fcd_name = "fcd_"+base_name+"_"+EXP
-    run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
-    reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
-    macro.reorder_by_id(fcd_name+".csv", bylane=False)
-    macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=10, dt=10, save=True, plot=True)
+    # update_sumo_configuration(best_params)
+    # base_name = SCENARIO+""
+    # fcd_name = "fcd_"+base_name+"_"+EXP
+    # run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
+    # reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
+    # macro.reorder_by_id(fcd_name+".csv", bylane=False)
+    # macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=10, dt=10, save=True, plot=True)
+
+    # vis.scatter_fcd(fcd_name+".out.xml")

@@ -249,6 +249,116 @@ def visualize_fcd(fcd_file, lanes=None):
     plt.show()
 
 
+def scatter_fcd(fcd_file, lanes=None):
+    # works on I-24 new only
+    # Parse the FCD XML file
+    tree = ET.parse(fcd_file)
+    root = tree.getroot()
+    dt = 30 # time batch size for scatter
+    start_time = 0
+
+    # Extract vehicle data
+    time_arr = []
+    x_arr = []
+    y_arr = []
+    v_arr = []
+    x0, y0 = 4048.27, 8091.19
+    exclude_edges = ["19447013", "19440938", "27925488", "782177974", "782177973", "19446904"]
+    
+    for timestep in root.findall('timestep'):
+        time = float(timestep.get('time'))
+        if time > 10800:
+            break
+        if time % 20 == 0:
+            for vehicle in timestep.findall('vehicle'):
+                if vehicle.get("lane").split("_")[0] not in exclude_edges:
+                    x = float(vehicle.get('x'))
+                    y = float(vehicle.get('y'))  # y is parsed but not used in this plot
+                    speed = float(vehicle.get('speed'))
+                    time_arr.append(time)
+                    x_arr.append(x)
+                    y_arr.append(y)
+                    v_arr.append(speed)
+            
+    # Convert lists to numpy arrays for faster plotting
+    time_arr = np.array(time_arr)
+    x_arr = np.array(x_arr)
+    y_arr = np.array(y_arr)
+    v_arr = np.array(v_arr)
+    distances = np.sqrt((x_arr - x0)**2 + (y_arr - y0)**2)
+    
+    # Plot time-space diagrams
+    plt.figure(figsize=(15, 10))
+    scatter = plt.scatter(time_arr, distances, c=v_arr, cmap='viridis', s=0.5)
+
+    cbar = plt.colorbar(scatter)
+    cbar.set_label('Speed (m/s)')
+
+    plt.title('Time-Space Diagram for All Lanes')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Position (m)')
+        
+    plt.tight_layout()
+    plt.show()
+
+
+def scatter_fcd_i24(fcd_file, lanes=None):
+    # Parse the FCD XML file
+    tree = ET.parse(fcd_file)
+    root = tree.getroot()
+    x_offset = -1000
+
+    # Extract vehicle data
+    time_arr = []
+    x_arr = []
+    # y_arr = []
+    v_arr = []
+    # x0, y0 = 4048.27, 8091.19
+    exclude_edges = ["E2", "E4", "E6"]
+    
+    for timestep in root.findall('timestep'):
+        time = float(timestep.get('time'))
+        if time > 10800:
+            break
+        # if time % 20 == 0:
+        for vehicle in timestep.findall('vehicle'):
+            if vehicle.get("lane").split("_")[0] not in exclude_edges:
+                x = float(vehicle.get('x'))
+                # y = float(vehicle.get('y'))  # y is parsed but not used in this plot
+                speed = float(vehicle.get('speed'))
+                time_arr.append(time)
+                x_arr.append(x)
+                # y_arr.append(y)
+                v_arr.append(speed)
+            
+    # Convert lists to numpy arrays for faster plotting
+    time_arr = np.array(time_arr) 
+    start_time = pd.Timestamp('2023-11-13 05:00:00')
+    time_arr = pd.to_datetime(start_time) + pd.to_timedelta(time_arr, unit='s')
+    x_arr = 57.6 - (np.array(x_arr) - x_offset)/1609.34 # start at 0
+    
+    # x_arr = dist/1609.34- (x_arr -x_offset)/1609.34 +57 # meter to mile
+    v_arr = np.array(v_arr) * 2.23694 # m/s to mph
+
+    print("plotting scatter...")
+    # Plot time-space diagrams
+    plt.figure(figsize=(15, 10))
+    scatter = plt.scatter(time_arr, x_arr, c=v_arr, cmap='viridis', s=0.5)
+
+    cbar = plt.colorbar(scatter)
+    cbar.set_label('Speed (mph)')
+
+    plt.title('Time-Space Diagram for All Lanes')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Position (mi)')
+    plt.gca().xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
+    plt.gca().invert_yaxis()
+
+        
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_rds_vs_sim(rds_dir, sumo_dir, measurement_locations, quantity="volume"):
     '''
     rds_dir: directory for filtered RDS data
@@ -422,7 +532,8 @@ def read_asm(asm_file):
     # Define the range of mile markers to plot
     milemarker_min = 53
     milemarker_max = 57
-    start_time = aggregated_data['unix_time'].min()
+    start_time = aggregated_data['unix_time'].min()+3600 # data starts at 4AM CST
+    print(start_time)
     end_time = start_time + 3*3600 # only select the first 3 hours
 
     # Filter milemarker within the specified range
@@ -432,8 +543,8 @@ def read_asm(asm_file):
         (aggregated_data['unix_time'] >= start_time) &
         (aggregated_data['unix_time'] <= end_time)
     ]
-    # Convert unix_time to datetime if needed and extract hour (UTC to Central time)
-    filtered_data['unix_time'] = pd.to_datetime(filtered_data['unix_time'], unit='s') - pd.Timedelta(hours=5)
+    # Convert unix_time to datetime if needed and extract hour (UTC to Central standard time in winter)
+    filtered_data['unix_time'] = pd.to_datetime(filtered_data['unix_time'], unit='s') - pd.Timedelta(hours=6)
 
     # Pivot the data for heatmaps
     volume_pivot = filtered_data.pivot(index='milemarker', columns='unix_time', values='total_volume')
@@ -474,7 +585,7 @@ def read_asm(asm_file):
     for ax in plt.gcf().axes:
         # Format the x-axis
         x_labels = ax.get_xticks()
-        new_labels = [pd.to_datetime(volume_pivot.columns[int(l)]).strftime('%H') for l in x_labels if l >= 0 and l < len(volume_pivot.columns)]
+        new_labels = [pd.to_datetime(volume_pivot.columns[int(l)]).strftime('%H:%M') for l in x_labels if l >= 0 and l < len(volume_pivot.columns)]
         ax.set_xticklabels(new_labels)
 
     plt.tight_layout()

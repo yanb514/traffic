@@ -197,25 +197,26 @@ if __name__ == "__main__":
 
     # ================================= get RDS data
     rds_dir = r'C:\Users\yanbing.wang\Documents\traffic\data\RDS\I24_WB_52_60_11132023.csv'
-    measured_output = reader.rds_to_matrix(rds_file=rds_dir, det_locations=measurement_locations)
+    # measured_output = reader.rds_to_matrix(rds_file=rds_dir, det_locations=measurement_locations)
 
     # # ================================= run default 
-    default_params =  {'maxSpeed': 31.605877951781565, 'minGap': 2.4630185481679043, 'accel': 1.6173674534215892, 'decel': 2.4864299905414677, 'tau': 1.4482507669327735, 'lcStrategic': 1.414282922055993, 'lcCooperative': 0.9998246130488315, 'lcAssertive': 0.5454520350957692, 'lcSpeedGain': 3.7567851330319795, 'lcKeepRight': 0.3604351181518853, 'lcOvertakeRight': 0.8767656712532168} 
+    default_params =  {'maxSpeed': 30.000301518417942, 'minGap': 1.0008548416706087, 'accel': 2.4271127920551323, 'decel': 1.6087240671929097, 'tau': 1.4973937275307305, 
+                        "lcStrategic": 1.0, "lcCooperative": 1.0,"lcAssertive": 1, "lcSpeedGain": 1.0, "lcKeepRight": 1.0, "lcOvertakeRight": 0} 
     update_sumo_configuration(default_params)
 
     # # # ================================= Create a study object and optimize the objective function
     # clear_directory("temp")
-    sampler = optuna.samplers.TPESampler(seed=10)
-    study = optuna.create_study(direction='minimize', sampler=sampler)
-    study.optimize(objective, n_trials=100, n_jobs=16)
-    fig = optuna.visualization.plot_optimization_history(study)
-    fig.show()
+    # sampler = optuna.samplers.TPESampler(seed=10)
+    # study = optuna.create_study(direction='minimize', sampler=sampler)
+    # study.optimize(objective, n_trials=10000, n_jobs=16)
+    # fig = optuna.visualization.plot_optimization_history(study)
+    # fig.show()
 
-    # Get the best parameters
-    best_params = study.best_params
-    print('Best parameters:', best_params)
-    with open(f'calibration_result/study_{EXP}.pkl', 'wb') as f:
-        pickle.dump(study, f)
+    # # Get the best parameters
+    # best_params = study.best_params
+    # print('Best parameters:', best_params)
+    # with open(f'calibration_result/study_{EXP}.pkl', 'wb') as f:
+    #     pickle.dump(study, f)
 
     # # # ================================ visualize time-space using best parameters
     # # best_params = {'maxSpeed': 30.804432612968196, 'minGap': 1.0083914605690099, 'accel': 2.257037304221662, 'decel': 2.2567041506643815, 'tau': 1.3447978212672462}
@@ -227,12 +228,13 @@ if __name__ == "__main__":
     # update_sumo_configuration(best_params)
     # base_name = SCENARIO+""
     # fcd_name = "fcd_"+base_name+"_"+EXP
-    # run_sumo(sim_config = base_name+".sumocfg")#, fcd_output =fcd_name+".out.xml")
+    # run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
     # reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
     # macro.reorder_by_id(fcd_name+".csv", bylane=False)
     # macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=482.803, dt=30, save=True, plot=True)
 
 
     # vis.plot_rds_vs_sim(rds_dir, sumo_dir, measurement_locations, quantity="occupancy")
-    # asm_file = "2023-11-13-ASM.csv"
+    # asm_file = r"C:\Users\yanbing.wang\Documents\traffic\data\2023-11-13-ASM.csv"
     # vis.read_asm(asm_file)
+    # vis.scatter_fcd(fcd_name+".out.xml")
