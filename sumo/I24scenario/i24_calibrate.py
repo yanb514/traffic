@@ -20,7 +20,11 @@ import macro
 # ================ I24 scenario ====================
 SCENARIO = "I24_scenario"
 EXP = "1b"
-sumo_dir = r'C:\Users\yanbing.wang\Documents\traffic\sumo\I24scenario'
+SUMO_DIR = r'C:\Users\yanbing.wang\Documents\traffic\sumo\I24scenario'
+RDS_DIR = r'C:\Users\yanbing.wang\Documents\traffic\data\RDS\I24_WB_52_60_11132023.csv'
+N_TRIALS = 16 # optimization trials
+N_JOBS = 16 # cores
+
 measurement_locations = [
                         # '56_7_0', '56_7_1', '56_7_2', '56_7_3', '56_7_4', 
                          '56_3_0', '56_3_1', '56_3_2', '56_3_3', '56_3_4',
@@ -30,24 +34,22 @@ measurement_locations = [
                          '54_1_0', '54_1_1', '54_1_2', '54_1_3' ]
 if "1" in EXP:
     param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau']
-    min_val = [30.0, 1.0, 1.0, 1.0, 0.5]  
-    max_val = [35.0, 3.0, 4.0, 3.0, 2.0] 
+    min_val = [25.0, 0.5, 1.0, 1.0, 0.5]  
+    max_val = [40.0, 3.0, 4.0, 4.0, 2.0] 
 elif "2" in EXP:
     param_names = ['lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain']
     min_val = [0, 0, 0.0001, 0]  
     max_val = [5, 1, 5,      5] 
 elif "3" in EXP:
     param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau', 'lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain']
-    min_val = [30.0, 1.0, 1.0, 1.0, 0.5, 0, 0, 0.0001, 0]  
-    max_val = [35.0, 3.0, 4.0, 3.0, 2.0, 5, 1, 5,      5] 
+    min_val = [25.0, 0.5, 1.0, 1.0, 0.5, 0, 0, 0.0001, 0]  
+    max_val = [40.0, 3.0, 4.0, 4.0, 2.0, 5, 1, 5,      5] 
 if "a" in EXP:
     MEAS = "volume"
 elif "b" in EXP:
     MEAS = "speed"
 elif "c" in EXP:
     MEAS = "occupancy"
-
-
 
 
 
@@ -182,7 +184,7 @@ def objective(trial):
     matrix_no_nan = np.where(mask, diff, 0)
     error = np.linalg.norm(matrix_no_nan)
 
-    # clear_directory(os.path.join("temp", str(trial.number)))
+    clear_directory(os.path.join("temp", str(trial.number)))
     logging.info(f'Trial {trial.number}: param={driver_param}, error={error}')
     
     return error
@@ -219,12 +221,11 @@ if __name__ == "__main__":
 
 
     # ================================= get RDS data
-    rds_dir = r'C:\Users\yanbing.wang\Documents\traffic\data\RDS\I24_WB_52_60_11132023.csv'
-    measured_output = reader.rds_to_matrix(rds_file=rds_dir, det_locations=measurement_locations)
+    measured_output = reader.rds_to_matrix(rds_file=RDS_DIR, det_locations=measurement_locations)
 
-    # # ================================= run default 
-    # default_params =  {'maxSpeed': 34.621487807245266, 'minGap': 2.955022475567193, 'accel': 1.8870921770516491, 'decel': 1.079848523770033, 'tau': 1.8321915203666037} # failed
-    # update_sumo_configuration(default_params)
+    # ================================= run default 
+    default_params =  {'maxSpeed': 34.91628705652602, 'minGap': 2.9288888706657783, 'accel': 1.0031145478483796, 'decel': 2.9618821510422406, 'tau': 1.3051261247487569}
+    update_sumo_configuration(default_params)
 
     # # ================================= Create a study object and optimize the objective function
     clear_directory("temp")
@@ -233,7 +234,7 @@ if __name__ == "__main__":
 
     sampler = optuna.samplers.TPESampler(seed=10)
     study = optuna.create_study(direction='minimize', sampler=sampler)
-    study.optimize(objective, n_trials=5000, n_jobs=16, callbacks=[logging_callback])
+    study.optimize(objective, n_trials=N_TRIALS, n_jobs=N_JOBS, callbacks=[logging_callback])
     fig = optuna.visualization.plot_optimization_history(study)
     fig.show()
 
@@ -243,11 +244,11 @@ if __name__ == "__main__":
     with open(f'calibration_result/study_{EXP}.pkl', 'wb') as f:
         pickle.dump(study, f)
 
-    # # # ================================ visualize time-space using best parameters
-    # # best_params = {'maxSpeed': 30.804432612968196, 'minGap': 1.0083914605690099, 'accel': 2.257037304221662, 'decel': 2.2567041506643815, 'tau': 1.3447978212672462}
-    # # update_sumo_configuration(best_params)
+    # # ================================ visualize time-space using best parameters
+    # best_params ={'maxSpeed': 40.91628705652602, 'minGap': 2.9288888706657783, 'accel': 1.0031145478483796, 'decel': 2.9618821510422406, 'tau': 1.3051261247487569}
+    # update_sumo_configuration(best_params)
     # run_sumo(sim_config=SCENARIO+".sumocfg", fcd_output ="trajs_best.xml")
-    # # vis.visualize_fcd("trajs_best.xml") # lanes=["E0_0", "E0_1", "E1_0", "E1_1", "E2_0", "E2_1", "E2_2", "E4_0", "E4_1"]
+    # vis.visualize_fcd("trajs_best.xml") # lanes=["E0_0", "E0_1", "E1_0", "E1_1", "E2_0", "E2_1", "E2_2", "E4_0", "E4_1"]
 
     # # ============== compute & save macroscopic properties ==================
     # update_sumo_configuration(best_params)
@@ -259,7 +260,7 @@ if __name__ == "__main__":
     # macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=482.803, dt=30, save=True, plot=True)
 
 
-    # vis.plot_rds_vs_sim(rds_dir, sumo_dir, measurement_locations, quantity="speed")
+    # vis.plot_rds_vs_sim(RDS_DIR, SUMO_DIR, measurement_locations, quantity="speed")
     # asm_file = "2023-11-13-ASM.csv"
     # vis.read_asm(asm_file)
     # vis.scatter_fcd_i24(fcd_name+".out.xml")

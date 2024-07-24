@@ -353,7 +353,6 @@ def scatter_fcd_i24(fcd_file, lanes=None):
     plt.ylabel('Position (mi)')
     plt.gca().xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
     plt.gca().invert_yaxis()
-
         
     plt.tight_layout()
     plt.show()
@@ -375,31 +374,31 @@ def plot_rds_vs_sim(rds_dir, sumo_dir, measurement_locations, quantity="volume")
         "volume": "nVeh/hr",
         "occupancy": "%"
     }
-    
-    start_time_rds = pd.Timestamp('00:00')  # Midnight
-    start_time_sim = pd.Timestamp('05:00')  # 5:00 AM
     time_interval = 300  # seconds
+    start_time_rds = pd.Timestamp('05:00')  # Midnight
+    start_time_sim = pd.Timestamp('05:00')  # 5:00 AM
+    start_idx_rds = int(5*3600/time_interval)
     
-    num_points_rds = len(rds_dict[quantity][0, :])
-    num_points_sim = len(sim_dict[quantity][0, :])-1
-    print(num_points_sim)
+    
+    num_points_rds = min(len(rds_dict[quantity][0, :]), int(3*3600/time_interval))
+    num_points_sim = min(len(sim_dict[quantity][0, :]), int(3*3600/time_interval)) # at most three hours of simulation
     
     # Create time indices for the x-axes
     time_index_rds = pd.date_range(start=start_time_rds, periods=num_points_rds, freq=f'{time_interval}s')
     time_index_sim = pd.date_range(start=start_time_sim, periods=num_points_sim, freq=f'{time_interval}s')
 
-    fig, axes = plt.subplots(nrows=5, ncols=5, figsize=(15, 15))
+    fig, axes = plt.subplots(nrows=5, ncols=5, figsize=(20, 12))
     axes = axes.flatten()
     for i, det in enumerate(measurement_locations):
         
-        axes[i].plot(time_index_rds, rds_dict[quantity][i,:], c="blue", label="obs")
-        axes[i].plot(time_index_sim, sim_dict[quantity][i,:-1], c="orange", label="sim")
+        axes[i].plot(time_index_rds, rds_dict[quantity][i,start_idx_rds:start_idx_rds+num_points_rds],  'go--', label="obs")
+        axes[i].plot(time_index_sim, sim_dict[quantity][i,:num_points_sim],  'rs--', label="sim")
         parts = det.split('_')
         axes[i].set_title( f"MM{parts[0]}.{parts[1]} lane {int(parts[2])+1}")
 
         # Format the x-axis
         axes[i].xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
-        axes[i].xaxis.set_major_locator(plt.matplotlib.dates.HourLocator(interval=5))
+        axes[i].xaxis.set_major_locator(plt.matplotlib.dates.HourLocator(interval=1))
         axes[i].tick_params(axis='x', rotation=45)
         axes[i].set_ylabel(unit_dict[quantity])
 
@@ -446,9 +445,6 @@ def plot_sim_vs_sim(sumo_dir, measurement_locations, quantity="volume"):
     # num_points_sim = len(sim2_dict[quantity][0, :])
     
     # Create time indices for the x-axes
-    # time_index_rds = pd.date_range(start=start_time_rds, periods=num_points_rds, freq=f'{time_interval}s')
-    # time_index_sim = pd.date_range(start=start_time_sim, periods=num_points_sim, freq=f'{time_interval}s')
-    # Parse measurement locations to get lanes and detectors
     lanes = sorted(set(int(location.split('_')[1]) for location in measurement_locations))
     detectors = list(OrderedDict.fromkeys(location.split('_')[0] for location in measurement_locations))
     print(detectors)
