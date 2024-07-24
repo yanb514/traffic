@@ -19,10 +19,10 @@ import macro
 
 # ================ I24 scenario ====================
 SCENARIO = "I24_scenario"
-EXP = "1b"
+EXP = "2b"
 SUMO_DIR = r'C:\Users\yanbing.wang\Documents\traffic\sumo\I24scenario'
 RDS_DIR = r'C:\Users\yanbing.wang\Documents\traffic\data\RDS\I24_WB_52_60_11132023.csv'
-N_TRIALS = 16 # optimization trials
+N_TRIALS = 5000 # optimization trials
 N_JOBS = 16 # cores
 
 measurement_locations = [
@@ -64,7 +64,12 @@ def run_sumo(sim_config, tripinfo_output=None, fcd_output=None):
     if fcd_output is not None:
         command.extend([ '--fcd-output', fcd_output])
         
-    subprocess.run(command, check=True)
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"SUMO simulation failed with error: {e}")
+    except OSError as e:
+        print(f"Execution failed: {e}")
 
 
 
@@ -226,8 +231,9 @@ if __name__ == "__main__":
     # ================================= run default 
     default_params =  {'maxSpeed': 34.91628705652602, 'minGap': 2.9288888706657783, 'accel': 1.0031145478483796, 'decel': 2.9618821510422406, 'tau': 1.3051261247487569}
     update_sumo_configuration(default_params)
+    # run_sumo(sim_config=SCENARIO+".sumocfg")
 
-    # # ================================= Create a study object and optimize the objective function
+    # ================================= Create a study object and optimize the objective function
     clear_directory("temp")
     current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     logging.basicConfig(filename=f'{current_time}_optuna_log_{EXP}.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -257,10 +263,14 @@ if __name__ == "__main__":
     # run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
     # reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
     # macro.reorder_by_id(fcd_name+".csv", bylane=False)
-    # macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=482.803, dt=30, save=True, plot=True)
+    # macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=160.934, dt=30, save=True, plot=True)
+
+    # with open('macro_fcd_I24_scenario_1b_byid.pkl', 'rb') as file:
+    #     macro_data = pickle.load(file)
+    # macro.plot_macro(macro_data, dx=160.934, dt=30)
 
 
     # vis.plot_rds_vs_sim(RDS_DIR, SUMO_DIR, measurement_locations, quantity="speed")
-    # asm_file = "2023-11-13-ASM.csv"
+    # asm_file = r"C:\Users\yanbing.wang\Documents\traffic\data\2023-11-13-ASM.csv"
     # vis.read_asm(asm_file)
     # vis.scatter_fcd_i24(fcd_name+".out.xml")

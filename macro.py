@@ -5,6 +5,8 @@ import pandas as pd
 import csv
 import xml.etree.ElementTree as ET
 import pickle
+from matplotlib.ticker import FuncFormatter
+import datetime
 
 def reorder_by_id(trajectory_file, bylane=False):
     # read the trajectory file to see if it is ordered by time (time increases from previous row)
@@ -187,38 +189,53 @@ def plot_macro(macro_data, dx=10, dt=10):
     '''
     plot heatmap of Q, Rho and V in one plot
     '''
+    hours = 3
+    length = int(hours * 3600/dt)
     plt.rcParams['font.family'] = 'Times New Roman'
     plt.rcParams['font.size'] = 18
-    fig, axs = plt.subplots(1,3, figsize=(17, 5))
-    Q, Rho, V = macro_data["flow"], macro_data["density"], macro_data["speed"]
+    fig, axs = plt.subplots(1,3, figsize=(20, 6))
+    Q, Rho, V = macro_data["flow"][:length,:], macro_data["density"][:length,:], macro_data["speed"][:length,:]
 
     # flow
-    h = axs[0].imshow(Q.T*3600, aspect='auto',vmin=0, vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr
+    h = axs[0].imshow(Q.T*3600, aspect='auto',vmin=0)# , vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr
     colorbar = fig.colorbar(h, ax=axs[0])
-    axs[0].set_title("Flow (veh/hr)")
+    axs[0].set_title("Flow (nVeh/hr)")
 
     # density
-    h= axs[1].imshow(Rho.T*1000, aspect='auto',vmin=0, vmax=np.max(Rho.T*1000)) # 200 convert veh/m to veh/km
+    h= axs[1].imshow(Rho.T*1000, aspect='auto',vmin=0) #, vmax=np.max(Rho.T*1000)) # 200 convert veh/m to veh/km
     colorbar = fig.colorbar(h, ax=axs[1])
     axs[1].set_title("Density (veh/km)")
 
     # speed
-    h = axs[2].imshow(V.T * 2.23694, aspect='auto',vmin=0, vmax=110) # 110 convert m/s to mph
+    h = axs[2].imshow(V.T * 2.23694, aspect='auto',vmin=0) #, vmax=110) # 110 convert m/s to mph
     colorbar = fig.colorbar(h, ax=axs[2])
     axs[2].set_title("Speed (mph)")
 
+    def time_formatter(x, pos):
+        # Calculate the time delta in minutes
+        minutes = 5*60 + x * xc # starts at 5am
+        # Convert minutes to hours and minutes
+        time_delta = datetime.timedelta(minutes=minutes)
+        # Convert time delta to string in HH:MM format
+        return str(time_delta)[:-3]  # Remove seconds part
 
     # Multiply x-axis ticks by a constant
     xc = dt/60  # convert sec to min
     yc = dx
     for ax in axs:
         ax.invert_yaxis()
-        xticks = ax.get_xticks()
-        ax.set_xticklabels(["{:.1f}".format(tick * xc) for tick in xticks])
+        # xticks = ax.get_xticks()
+        # ax.set_xticks(xticks)
+        # ax.set_xticklabels(["{:.1f}".format(5 + tick * xc /60) for tick in xticks])
+        ax.xaxis.set_major_formatter(FuncFormatter(time_formatter))
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
         yticks = ax.get_yticks()
-        ax.set_yticklabels([str(int(tick * yc)) for tick in yticks])
-        ax.set_xlabel("Time (min)")
-        ax.set_ylabel("Space (m)")
+        # ax.set_yticks(yticks)
+        ax.set_yticklabels(["{:.1f}".format(57.6- tick * yc / 1609.34 ) for tick in yticks])
+        # ax.set_yticklabels([str(int(tick * yc/ 1609.34)) for tick in yticks])
+        ax.set_xlabel("Time (hour of day)")
+        ax.set_ylabel("Milemarker")
+        
     plt.tight_layout()
     plt.show()
 
@@ -252,7 +269,7 @@ def compare_macro(macro_data_1, macro_data_2):
         ax.set_xlim([0,8])
         ax.invert_yaxis()
         xticks = ax.get_xticks()
-        ax.set_xticklabels([str(int(tick * xc)) for tick in xticks])
+        ax.set_xticklabels([str(int(tick * xc)) for tick in xticks]) # convert to milemarker
         yticks = ax.get_yticks()
         ax.set_yticklabels([str(int(tick * yc)) for tick in yticks])
         ax.set_xlabel("Time (min)")

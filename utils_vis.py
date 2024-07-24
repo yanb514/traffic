@@ -526,10 +526,10 @@ def read_asm(asm_file):
         aggregated_data = pd.concat([aggregated_data, processed_chunk], ignore_index=True)
 
     # Define the range of mile markers to plot
-    milemarker_min = 53
-    milemarker_max = 57
+    milemarker_min = 54.1
+    milemarker_max = 57.6
     start_time = aggregated_data['unix_time'].min()+3600 # data starts at 4AM CST
-    print(start_time)
+    
     end_time = start_time + 3*3600 # only select the first 3 hours
 
     # Filter milemarker within the specified range
@@ -551,10 +551,12 @@ def read_asm(asm_file):
     # yticks = range(milemarker_min, milemarker_max + 1)
 
     # Plot the heatmaps
-    plt.figure(figsize=(15, 5))
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = 18
+    plt.figure(figsize=(20, 6))
 
     plt.subplot(1, 3, 1)
-    sns.heatmap(volume_pivot, cmap='viridis', cbar_kws={'label': 'Volume'}) # convert from 
+    sns.heatmap(volume_pivot, cmap='viridis') # convert from 
     plt.title('Volume (nVeh/hr)')
     plt.xlabel('Time (hour of day)')
     plt.ylabel('Milemarker')
@@ -562,7 +564,7 @@ def read_asm(asm_file):
     plt.xticks(rotation=45)
 
     plt.subplot(1, 3, 2)
-    sns.heatmap(occ_pivot, cmap='viridis', cbar_kws={'label': 'Occupancy'})
+    sns.heatmap(occ_pivot, cmap='viridis')
     plt.title('Occupancy (%)')
     plt.xlabel('Time (hour of day)')
     plt.ylabel('Milemarker')
@@ -570,7 +572,7 @@ def read_asm(asm_file):
     plt.xticks(rotation=45)
 
     plt.subplot(1, 3, 3)
-    sns.heatmap(speed_pivot, cmap='viridis', cbar_kws={'label': 'Speed'})
+    sns.heatmap(speed_pivot, cmap='viridis')
     plt.title('Speed (mph)')
     plt.xlabel('Time (hour of day)')
     plt.ylabel('Milemarker')
@@ -581,7 +583,13 @@ def read_asm(asm_file):
     for ax in plt.gcf().axes:
         # Format the x-axis
         x_labels = ax.get_xticks()
-        new_labels = [pd.to_datetime(volume_pivot.columns[int(l)]).strftime('%H:%M') for l in x_labels if l >= 0 and l < len(volume_pivot.columns)]
+        # new_labels = [pd.to_datetime(volume_pivot.columns[int(l)]).strftime('%H:%M') for l in x_labels if l >= 0 and l < len(volume_pivot.columns)]
+        new_labels = [
+                pd.to_datetime(volume_pivot.columns[int(l)]).strftime('%H:%M') 
+                if i % 2 == 0 else ''
+                for i, l in enumerate(x_labels) 
+                if l >= 0 and l < len(volume_pivot.columns)
+            ]
         ax.set_xticklabels(new_labels)
 
     plt.tight_layout()

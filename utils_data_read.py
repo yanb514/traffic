@@ -135,6 +135,7 @@ def extract_sim_meas(measurement_locations, file_dir = ""):
             continue
         
         # Parse the XML file
+        print("****", filename)
         tree = ET.parse(filename)
         root = tree.getroot()
 
