@@ -20,10 +20,19 @@ import macro
 # ================ I24 scenario ====================
 SCENARIO = "I24_scenario"
 EXP = "2b"
-SUMO_DIR = r'C:\Users\yanbing.wang\Documents\traffic\sumo\I24scenario'
-RDS_DIR = r'C:\Users\yanbing.wang\Documents\traffic\data\RDS\I24_WB_52_60_11132023.csv'
-N_TRIALS = 5000 # optimization trials
+N_TRIALS = 8000 # optimization trials
 N_JOBS = 16 # cores
+
+computer_name = os.environ.get('COMPUTERNAME', 'Unknown')
+if "CSI" in computer_name:
+    SUMO_DIR = r'C:\Users\yanbing.wang\Documents\traffic\sumo\I24scenario'
+    RDS_DIR = r'C:\Users\yanbing.wang\Documents\traffic\data\RDS\I24_WB_52_60_11132023.csv'
+    sumo_exe = 'sumo'
+elif "VMS" in computer_name:
+    SUMO_DIR = r'C:\Users\svcpsat\Documents\SUMO_studies\traffic\sumo\I24scenario'
+    RDS_DIR = r'C:\Users\svcpsat\Documents\SUMO_studies\traffic\data\RDS\I24_WB_52_60_11132023.csv'
+    sumo_exe = r'C:\Program Files (x86)\Eclipse\Sumo\bin\sumo.exe'
+    
 
 measurement_locations = [
                         # '56_7_0', '56_7_1', '56_7_2', '56_7_3', '56_7_4', 
@@ -52,12 +61,25 @@ elif "c" in EXP:
     MEAS = "occupancy"
 
 
+default_params =  {'maxSpeed': 34.91628705652602,
+                    'minGap': 2.9288888706657783,
+                    'accel': 1.0031145478483796,
+                    'decel': 2.9618821510422406,
+                    'tau': 1.3051261247487569,
+                    'lcStrategic': 1.414,
+                    'lcCooperative': 1.0,
+                    'lcAssertive': 1.0,
+                    'lcSpeedGain': 3.76,
+                    'lcKeepRight': 0.0,
+                    'lcOvertakeRight': 0.877}
+
+
 
 def run_sumo(sim_config, tripinfo_output=None, fcd_output=None):
     """Run a SUMO simulation with the given configuration."""
     # command = ['sumo', '-c', sim_config, '--tripinfo-output', tripinfo_output, '--fcd-output', fcd_output]
 
-    command = ['sumo', '-c', sim_config]
+    command = [sumo_exe, '-c', sim_config]
     if tripinfo_output is not None:
         command.extend(['--tripinfo-output', tripinfo_output])
         
@@ -229,14 +251,13 @@ if __name__ == "__main__":
     measured_output = reader.rds_to_matrix(rds_file=RDS_DIR, det_locations=measurement_locations)
 
     # ================================= run default 
-    default_params =  {'maxSpeed': 34.91628705652602, 'minGap': 2.9288888706657783, 'accel': 1.0031145478483796, 'decel': 2.9618821510422406, 'tau': 1.3051261247487569}
     update_sumo_configuration(default_params)
     # run_sumo(sim_config=SCENARIO+".sumocfg")
 
     # ================================= Create a study object and optimize the objective function
     clear_directory("temp")
     current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    logging.basicConfig(filename=f'{current_time}_optuna_log_{EXP}.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
+    logging.basicConfig(filename=f'{current_time}_optuna_log_{EXP}_{N_TRIALS}_{N_JOBS}.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
 
     sampler = optuna.samplers.TPESampler(seed=10)
     study = optuna.create_study(direction='minimize', sampler=sampler)
@@ -251,7 +272,7 @@ if __name__ == "__main__":
         pickle.dump(study, f)
 
     # # ================================ visualize time-space using best parameters
-    # best_params ={'maxSpeed': 40.91628705652602, 'minGap': 2.9288888706657783, 'accel': 1.0031145478483796, 'decel': 2.9618821510422406, 'tau': 1.3051261247487569}
+    # best_params = {'maxSpeed': 31.534820558874827, 'minGap': 1.860096631767026, 'accel': 1.0708978903827724, 'decel': 3.8918676775882215, 'tau': 1.7949543267839752}
     # update_sumo_configuration(best_params)
     # run_sumo(sim_config=SCENARIO+".sumocfg", fcd_output ="trajs_best.xml")
     # vis.visualize_fcd("trajs_best.xml") # lanes=["E0_0", "E0_1", "E1_0", "E1_1", "E2_0", "E2_1", "E2_2", "E4_0", "E4_1"]
@@ -260,17 +281,17 @@ if __name__ == "__main__":
     # update_sumo_configuration(best_params)
     # base_name = SCENARIO+""
     # fcd_name = "fcd_"+base_name+"_"+EXP
-    # run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
+    # run_sumo(sim_config = base_name+".sumocfg")#, fcd_output =fcd_name+".out.xml")
     # reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
-    # macro.reorder_by_id(fcd_name+".csv", bylane=False)
-    # macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=160.934, dt=30, save=True, plot=True)
+    # macro.reorder_by_id(fcd_name+".csv", bylane="mainline")
+    # macro_data = macro.compute_macro(fcd_name+"_mainline.csv", dx=160.934, dt=30, save=True, plot=True)
 
-    # with open('macro_fcd_I24_scenario_1b_byid.pkl', 'rb') as file:
+    # with open(f'macro_fcd_I24_scenario_{EXP}_byid.pkl', 'rb') as file:
     #     macro_data = pickle.load(file)
     # macro.plot_macro(macro_data, dx=160.934, dt=30)
 
 
-    # vis.plot_rds_vs_sim(RDS_DIR, SUMO_DIR, measurement_locations, quantity="speed")
+    # vis.plot_rds_vs_sim(RDS_DIR, SUMO_DIR, measurement_locations, quantity="volume")
     # asm_file = r"C:\Users\yanbing.wang\Documents\traffic\data\2023-11-13-ASM.csv"
     # vis.read_asm(asm_file)
     # vis.scatter_fcd_i24(fcd_name+".out.xml")

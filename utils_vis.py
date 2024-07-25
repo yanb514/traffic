@@ -556,7 +556,7 @@ def read_asm(asm_file):
     plt.figure(figsize=(20, 6))
 
     plt.subplot(1, 3, 1)
-    sns.heatmap(volume_pivot, cmap='viridis') # convert from 
+    sns.heatmap(volume_pivot, cmap='viridis', vmin=0, vmax=8000) # convert from 
     plt.title('Volume (nVeh/hr)')
     plt.xlabel('Time (hour of day)')
     plt.ylabel('Milemarker')
@@ -564,7 +564,7 @@ def read_asm(asm_file):
     plt.xticks(rotation=45)
 
     plt.subplot(1, 3, 2)
-    sns.heatmap(occ_pivot, cmap='viridis')
+    sns.heatmap(occ_pivot, cmap='viridis', vmin=0)
     plt.title('Occupancy (%)')
     plt.xlabel('Time (hour of day)')
     plt.ylabel('Milemarker')
@@ -572,7 +572,7 @@ def read_asm(asm_file):
     plt.xticks(rotation=45)
 
     plt.subplot(1, 3, 3)
-    sns.heatmap(speed_pivot, cmap='viridis')
+    sns.heatmap(speed_pivot, cmap='viridis', vmin=0, vmax=80)
     plt.title('Speed (mph)')
     plt.xlabel('Time (hour of day)')
     plt.ylabel('Milemarker')

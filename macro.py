@@ -8,10 +8,17 @@ import pickle
 from matplotlib.ticker import FuncFormatter
 import datetime
 
-def reorder_by_id(trajectory_file, bylane=False):
+def reorder_by_id(trajectory_file, bylane="mainline"):
     # read the trajectory file to see if it is ordered by time (time increases from previous row)
     # assumption: trajectory_file is either ordered by time or by vehicleID
     # separate files by laneID if bylane is True
+    mainline = ["E0_1", "E0_2", "E0_3", "E0_4",
+                "E1_2", "E1_3", "E1_4", "E1_5",
+                "E3_1", "E3_2", "E3_3", "E3_4",
+                "E5_0", "E5_1", "E5_2", "E5_3",
+                "E7_1", "E7_2", "E7_3", "E7_4",
+                "E8_0", "E8_1", "E8_2", "E8_3"
+                ] # since ASM is only processed on lane 1-4 (SUMO reversed lane idx)
     prev_time = -1
     ordered_by_time = True
     with open(trajectory_file, mode='r') as file:
@@ -46,7 +53,7 @@ def reorder_by_id(trajectory_file, bylane=False):
         # Sort the rows by vehicleID and then by time within each vehicleID
         rows.sort(key=lambda x: (x[0], float(x[1])))
 
-        if bylane:
+        if bylane==True:
             # Organize rows by laneID
             lanes = defaultdict(list)
             for row in rows:
@@ -59,6 +66,18 @@ def reorder_by_id(trajectory_file, bylane=False):
                     file.write(",".join(headers) + "\n")  # Write the headers
                     for row in lane_rows:
                         file.write(" ".join(str(num) for num in row) + "\n")
+
+        elif bylane == "mainline":
+            # Write the sorted rows to a new CSV file
+            output_file = trajectory_file.replace(".csv", "_mainline.csv")
+            with open(output_file, mode='w') as file:
+                # csv_writer = csv.writer(file)
+                file.write(",".join(str(num) for num in headers)+"\n")  # Write the headers
+                # csv_writer.writerows(rows)
+                for row in rows:
+                    lane_id = row[2]
+                    if lane_id in mainline:
+                        file.write(" ".join(str(num) for num in row)+"\n")
         else:
             # Write the sorted rows to a new CSV file
             output_file = trajectory_file.replace(".csv", "_byid.csv")
@@ -197,7 +216,7 @@ def plot_macro(macro_data, dx=10, dt=10):
     Q, Rho, V = macro_data["flow"][:length,:], macro_data["density"][:length,:], macro_data["speed"][:length,:]
 
     # flow
-    h = axs[0].imshow(Q.T*3600, aspect='auto',vmin=0)# , vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr
+    h = axs[0].imshow(Q.T*3600, aspect='auto',vmin=0, vmax=8000)# , vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr
     colorbar = fig.colorbar(h, ax=axs[0])
     axs[0].set_title("Flow (nVeh/hr)")
 
@@ -207,7 +226,7 @@ def plot_macro(macro_data, dx=10, dt=10):
     axs[1].set_title("Density (veh/km)")
 
     # speed
-    h = axs[2].imshow(V.T * 2.23694, aspect='auto',vmin=0) #, vmax=110) # 110 convert m/s to mph
+    h = axs[2].imshow(V.T * 2.23694, aspect='auto',vmin=0, vmax=80) #, vmax=110) # 110 convert m/s to mph
     colorbar = fig.colorbar(h, ax=axs[2])
     axs[2].set_title("Speed (mph)")
 
