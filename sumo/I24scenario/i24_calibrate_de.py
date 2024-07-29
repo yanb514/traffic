@@ -23,10 +23,10 @@ import macro
 
 # ================ I24 scenario ====================
 SCENARIO = "I24_scenario"
-EXP = "2b"
-MAXITER = 2 # DE
-POPSIZE = 2 # DE
-NUM_WORKERS = 2
+EXP = "3b"
+MAXITER = 100 # DE
+POPSIZE = 15 # DE
+NUM_WORKERS = 64
 
 computer_name = os.environ.get('COMPUTERNAME', 'Unknown')
 if "CSI" in computer_name:
@@ -49,7 +49,7 @@ measurement_locations = [
 if "1" in EXP:
     param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau']
     min_val = [25.0, 0.5, 1.0, 1.0, 0.5]  
-    max_val = [40.0, 3.0, 4.0, 4.0, 2.0] 
+    max_val = [43.0, 3.0, 4.0, 4.0, 3] 
 elif "2" in EXP:
     param_names = ['lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain']
     min_val = [0, 0, 0.0001, 0]  
@@ -57,7 +57,7 @@ elif "2" in EXP:
 elif "3" in EXP:
     param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau', 'lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain']
     min_val = [25.0, 0.5, 1.0, 1.0, 0.5, 0, 0, 0.0001, 0]  
-    max_val = [40.0, 3.0, 4.0, 4.0, 2.0, 5, 1, 5,      5] 
+    max_val = [43.0, 3.0, 4.0, 4.0, 3.0, 5, 1, 5,      5] 
 if "a" in EXP:
     MEAS = "volume"
 elif "b" in EXP:
@@ -79,8 +79,9 @@ default_params =  {'maxSpeed': 34.91628705652602,
 
 # Set up logging
 # current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-logging.basicConfig(filename=f'DE_log_{EXP}.log', level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.basicConfig(filename=f'DE_log_{EXP}_{MAXITER}_{POPSIZE}_{NUM_WORKERS}.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger()
+
 # =============================================
 
 def run_sumo(sim_config, tripinfo_output=None, fcd_output=None):
@@ -215,7 +216,7 @@ def objective_de(params, param_names, measurement_locations, measured_output, lo
     # Replace NaNs with 0 in the matrix for norm calculation
     matrix_no_nan = np.where(mask, diff, 0)
     error = np.linalg.norm(matrix_no_nan)
-    logger.info(f'fun={error}, params={driver_param}')
+    # logger.info(f'fun={error}, params={driver_param}')
 
     clear_directory(temp_path)
     

@@ -4,10 +4,12 @@ import xml.etree.ElementTree as ET
 import os
 import sys
 import subprocess
+import pickle
 main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')) # two levels up
 sys.path.insert(0, main_path)
 import utils_vis as vis
 import macro
+
 # import pandas as pd
 
 def run_simulation(readfilename):
@@ -115,11 +117,23 @@ if __name__ == "__main__":
     # subprocess.run(["python", script_path] + ["vTypeDist.txt"]) # add aguments
 
     # ============== simulate & save data ==================
-    # sumo_name = 'onramp'
-    # file_name = sumo_name + "_trajectories_test.csv"
-    # write_vehicle_trajectories_to_csv(sumo_name, file_name)
-    # vis.scatter_time_space("", file_name, highlight_leaders=False)
+    fcd_name = "fcd_onramp_cf_rho"
+    lane_id = 2 # left-most lane is lane 1
+    if lane_id == 1:
+        link_names = ["E0_1", "E1_1", "E2_2", "E4_1"]
+    elif lane_id == 2:
+        link_names = ["E0_0", "E1_0", "E2_1", "E4_0"]
+    elif lane_id == "onramp":
+        link_names = ["ramp_0", "E2_0"]
+    macro.reorder_by_id(fcd_name+".csv", link_names=link_names, lane_name="lane2")
+    macro_data = macro.compute_macro(fcd_name+"_lane2.csv", dx=10, dt=10, start_time=0, end_time=480, start_pos =0, end_pos=1300,
+                                     save=True, plot=True)
+    # macro_data = macro.compute_macro("onramp_trajectories_ramp_0.csv", dx=10, dt=10, save=True, plot=False)
 
-    # ============== compute macroscopic properties ==================
-    # macro.reorder_by_id(file_name, bylane=True)
-    macro_data = macro.compute_macro("onramp_trajectories_ramp_0.csv", dx=10, dt=10, save=True, plot=False)
+    # macro_pkl = r'Z:\VMS_Data\I24MOTION\SUMO\macro_data\macro_onramp_trajectories_E4_1.pkl'
+    # with open(macro_pkl, 'rb') as file:
+    #     macro_data = pickle.load(file)
+    # print(macro_data["speed"])
+    # macro.plot_macro(macro_data)
+
+

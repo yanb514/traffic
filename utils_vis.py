@@ -8,6 +8,7 @@ from collections import OrderedDict
 from matplotlib.ticker import FuncFormatter
 import seaborn as sns
 import matplotlib.dates as mdates
+import datetime
 
 # Path to your data file
 def scatter_time_space(data_path, file_name, highlight_leaders=False):
@@ -159,7 +160,139 @@ def plot_time_space(data_path, file_name, highlight_leaders=False):
     return
 
 
+def plot_macro_sim_grid(macro_data, quantity, dx=10, dt=10, fig=None, axes=None, ax_idx=0, label=''):
+    '''
+    plot heatmap of Q, Rho and V in one plot
+    '''
+    fs = 18
+    minutes = 10
+    length = int(minutes * 60/dt)
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = fs
+    if fig is None:
+        fig, axes = plt.subplots(3,3, figsize=(18, 13.5))
+        axes = axes.flatten()
 
+    unit_dict = {
+        "speed": "mph",
+        "flow": "vph",
+        "density": "veh/mile"
+    }
+    max_dict = {
+        "speed": 60,
+        "flow": 4000,
+        "density": 600
+    }
+    scale_dict = {
+        'speed': 2.23694, # 110 convert m/s to mph
+        'flow': 3600, # convert veh/s to veh/hr/lane
+        'density': 1609.34 # veh/m to veh/mile
+    }
+
+    data = macro_data[quantity][:length,:]
+    
+    h = axes[ax_idx].imshow(data.T*scale_dict[quantity], aspect='auto',vmin=0, vmax=max_dict[quantity])# , vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr/lane
+    
+    # axes[ax_idx].set_title(f"{quantity.capitalize()} ({unit_dict[quantity]})")
+    axes[ax_idx].set_title("Exp "+label, fontsize=fs)
+
+
+    def time_formatter(x, pos):
+        # Calculate the time delta in minutes
+        minutes = x * xc # starts at 0
+        # Convert minutes to hours and minutes
+        time_delta = datetime.timedelta(minutes=minutes)
+        # Convert time delta to string in HH:MM format
+        return str(time_delta)[3:]  # Remove seconds part
+
+    # Multiply x-axis ticks by a constant
+    xc = dt/60  # convert sec to min
+    yc = dx
+    ax = axes[ax_idx]
+
+    ax.invert_yaxis()
+    ax.xaxis.set_major_formatter(FuncFormatter(time_formatter))
+    yticks = ax.get_yticks()
+    
+    ax.set_yticklabels([str(int(tick * yc)) for tick in yticks])
+    if ax_idx >= 6:
+        ax.set_xlabel("Time (min)")
+    if ax_idx in [0,3,6]:
+        ax.set_ylabel("Position (m)")
+        
+    colorbar = fig.colorbar(h, ax=axes[ax_idx])
+    if ax_idx in [2,5,8]:
+        colorbar.ax.set_ylabel(f"{quantity.capitalize()} ({unit_dict[quantity]})", rotation=90, labelpad=15)
+    plt.tight_layout()
+    return fig, axes
+
+def plot_macro_grid(macro_data, quantity, dx=160.934, dt=30, fig=None, axes=None, ax_idx=0, label=''):
+    '''
+    plot heatmap of Q, Rho and V in one plot
+    '''
+    fs = 18
+    hours = 3
+    length = int(hours * 3600/dt)
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = fs
+    if fig is None:
+        fig, axes = plt.subplots(3,3, figsize=(18, 14))
+        axes = axes.flatten()
+
+    unit_dict = {
+        "speed": "mph",
+        "flow": "vph",
+        "density": "veh/mile"
+    }
+    max_dict = {
+        "speed": 80,
+        "flow": 2000,
+        "density": 600
+    }
+    scale_dict = {
+        'speed': 2.23694, # 110 convert m/s to mph
+        'flow': 3600/4, # convert veh/s to veh/hr/lane
+        'density': 1609.34 # veh/m to veh/mile
+    }
+
+    data = macro_data[quantity][:length,:]
+    
+    h = axes[ax_idx].imshow(data.T*scale_dict[quantity], aspect='auto',vmin=0, vmax=max_dict[quantity])# , vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr/lane
+    
+    # axes[ax_idx].set_title(f"{quantity.capitalize()} ({unit_dict[quantity]})")
+    axes[ax_idx].set_title("Exp "+label, fontsize=fs)
+
+
+    def time_formatter(x, pos):
+        # Calculate the time delta in minutes
+        minutes = 5*60 + x * xc # starts at 0
+        # Convert minutes to hours and minutes
+        time_delta = datetime.timedelta(minutes=minutes)
+        # Convert time delta to string in HH:MM format
+        return str(time_delta)[:-3]  # Remove seconds part
+
+    # Multiply x-axis ticks by a constant
+    xc = dt/60  # convert sec to min
+    yc = dx
+    ax = axes[ax_idx]
+
+    ax.invert_yaxis()
+    ax.xaxis.set_major_formatter(FuncFormatter(time_formatter))
+    
+    if ax_idx >= 6:
+        ax.set_xlabel("Time (hour of day)")
+    if ax_idx in [0,3,6]:
+        ax.set_ylabel("Milemarker")
+        
+    colorbar = fig.colorbar(h, ax=axes[ax_idx])
+    if ax_idx in [2,5,8]:
+        colorbar.ax.set_ylabel(f"{quantity.capitalize()} ({unit_dict[quantity]})", rotation=90, labelpad=15)
+    
+    plt.tight_layout()
+    yticks = ax.get_yticks()
+    ax.set_yticklabels(["{:.1f}".format(57.6- tick * yc / 1609.34 ) for tick in yticks])
+
+    return fig, axes
 
 
 def plot_detector_data(xml_file, v=None, rho=None, q=None):
@@ -506,6 +639,124 @@ def plot_sim_vs_sim(sumo_dir, measurement_locations, quantity="volume"):
     return
 
 
+
+def plot_line_detectors_sim(sumo_dir, measurement_locations, quantity="volume", fig=None, axes=None, label=''):
+    '''
+    sumo_dir: directory for DETECTOR.out.xml files
+    measurement_locations: a list of detectors
+    quantity: "volume", "speed" or "occupancy"
+    '''
+    fs = 20
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = fs
+
+
+    # Read and extract data
+    if label == "gt":
+        sim_dict = reader.extract_sim_meas(measurement_locations=measurement_locations, file_dir=sumo_dir) #gt
+    else:
+        sim_dict = reader.extract_sim_meas(measurement_locations=["trial_" + location for location in measurement_locations], file_dir=sumo_dir)
+    
+    unit_dict = {
+        "speed": "mph",
+        "volume": "vphpl",
+        "occupancy": "%"
+    }
+    max_dict = {
+        "speed": 60,
+        "volume": 2400,
+        "occupancy": 100
+    }
+    
+    num_points_rds = len(sim_dict[quantity][0, :])
+
+    # Create a grid of subplots
+    if fig is None:
+        fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(14, 8))
+    axes = axes.flatten()
+    # Determine the y-axis range across all plots
+    y_min = 0
+    y_max = max_dict[quantity] # max(sim1_dict[quantity].max(), sim2_dict[quantity].max()) #+ 200
+
+    for i, det in enumerate(measurement_locations):
+        ax = axes[i]
+        ax.plot(sim_dict[quantity][i, :], linestyle='--', marker='o', label=label)
+        parts = det.split("_")
+        title = f"{parts[0].capitalize()} lane {int(parts[1]) + 1}"
+        ax.set_title(title, fontsize=fs)
+        ax.set_ylim(y_min, y_max)
+        ax.set_xlabel("Time (min)")
+        ax.set_xticks(range(0, num_points_rds, 2))
+        if i in [0,3]:
+            ax.set_ylabel(f"{quantity.capitalize()} ({unit_dict[quantity]})")
+    
+    axes[2].legend(loc='upper left', bbox_to_anchor=(1, 1))
+
+    # Adjust the layout to make room for the legends
+    plt.tight_layout(rect=[0, 0, 1, 1])
+
+
+    return fig, axes
+
+
+
+def plot_line_detectors(sumo_dir, measurement_locations, quantity="volume", fig=None, axes=None, label=''):
+    '''
+    sumo_dir: directory for DETECTOR.out.xml files
+    measurement_locations: a list of detectors
+    quantity: "volume", "speed" or "occupancy"
+    '''
+    fs = 20
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = fs
+
+
+    # Read and extract data
+    if label == "gt":
+        sim_dict = reader.extract_sim_meas(measurement_locations=measurement_locations, file_dir=sumo_dir) #gt
+    else:
+        sim_dict = reader.extract_sim_meas(measurement_locations=["trial_" + location for location in measurement_locations], file_dir=sumo_dir)
+    
+    unit_dict = {
+        "speed": "mph",
+        "volume": "vphpl",
+        "occupancy": "%"
+    }
+    max_dict = {
+        "speed": 60,
+        "volume": 2400,
+        "occupancy": 100
+    }
+    
+    num_points_rds = len(sim_dict[quantity][0, :])
+
+    # Create a grid of subplots
+    if fig is None:
+        fig, axes = plt.subplots(nrows=5, ncols=5, figsize=(20, 18))
+
+    axes = axes.flatten()
+    # Determine the y-axis range across all plots
+    y_min = 0
+    y_max = max_dict[quantity] # max(sim1_dict[quantity].max(), sim2_dict[quantity].max()) #+ 200
+
+    for i, det in enumerate(measurement_locations):
+        ax = axes[i]
+        ax.plot(sim_dict[quantity][i, :], linestyle='--', marker='o', label=label)
+        parts = det.split("_")
+        title = f"{parts[0].capitalize()} lane {int(parts[1]) + 1}"
+        ax.set_title(title, fontsize=fs)
+        ax.set_ylim(y_min, y_max)
+        ax.set_xlabel("Time (min)")
+        ax.set_xticks(range(0, num_points_rds, 2))
+        if i in [0,3]:
+            ax.set_ylabel(f"{quantity.capitalize()} ({unit_dict[quantity]})")
+    
+    axes[2].legend(loc='upper left', bbox_to_anchor=(1, 1))
+
+    # Adjust the layout to make room for the legends
+    plt.tight_layout(rect=[0, 0, 1, 1])
+    return fig, axes
+
 def read_asm(asm_file):
 
     # Initialize an empty DataFrame to store the aggregated results
@@ -514,7 +765,7 @@ def read_asm(asm_file):
     # Define a function to process each chunk
     def process_chunk(chunk):
         # Calculate aggregated volume, occupancy, and speed for each row
-        chunk['total_volume'] = chunk[['lane1_volume', 'lane2_volume', 'lane3_volume', 'lane4_volume']].sum(axis=1)*120 # convert from veh/30s to veh/hr
+        chunk['total_volume'] = chunk[['lane1_volume', 'lane2_volume', 'lane3_volume', 'lane4_volume']].mean(axis=1)*120 # convert from veh/30s to veh/hr/lane
         chunk['total_occ'] = chunk[['lane1_occ',  'lane2_occ','lane3_occ',  'lane4_occ']].mean(axis=1)
         chunk['total_speed'] = chunk[['lane1_speed',  'lane2_speed', 'lane3_speed','lane4_speed']].mean(axis=1)
         return chunk[['unix_time', 'milemarker', 'total_volume', 'total_occ', 'total_speed']]
@@ -556,16 +807,17 @@ def read_asm(asm_file):
     plt.figure(figsize=(20, 6))
 
     plt.subplot(1, 3, 1)
-    sns.heatmap(volume_pivot, cmap='viridis', vmin=0, vmax=8000) # convert from 
-    plt.title('Volume (nVeh/hr)')
+    sns.heatmap(volume_pivot, cmap='viridis', vmin=0) # convert from 
+    plt.title('Flow (nVeh/hr/lane)')
     plt.xlabel('Time (hour of day)')
     plt.ylabel('Milemarker')
     # plt.yticks(ticks=yticks, labels=yticks)
     plt.xticks(rotation=45)
 
     plt.subplot(1, 3, 2)
-    sns.heatmap(occ_pivot, cmap='viridis', vmin=0)
-    plt.title('Occupancy (%)')
+    # sns.heatmap(occ_pivot, cmap='viridis', vmin=0)
+    sns.heatmap(volume_pivot/speed_pivot, cmap='viridis', vmin=0)
+    plt.title('Density (nVeh/mile/lane)')
     plt.xlabel('Time (hour of day)')
     plt.ylabel('Milemarker')
     # plt.yticks(ticks=yticks, labels=yticks)

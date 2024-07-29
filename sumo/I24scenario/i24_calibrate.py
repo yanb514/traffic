@@ -19,8 +19,8 @@ import macro
 
 # ================ I24 scenario ====================
 SCENARIO = "I24_scenario"
-EXP = "2b"
-N_TRIALS = 8000 # optimization trials
+EXP = "2c"
+N_TRIALS = 10000 # optimization trials
 N_JOBS = 16 # cores
 
 computer_name = os.environ.get('COMPUTERNAME', 'Unknown')
@@ -44,7 +44,7 @@ measurement_locations = [
 if "1" in EXP:
     param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau']
     min_val = [25.0, 0.5, 1.0, 1.0, 0.5]  
-    max_val = [40.0, 3.0, 4.0, 4.0, 2.0] 
+    max_val = [43.0, 3.0, 4.0, 4.0, 3] 
 elif "2" in EXP:
     param_names = ['lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain']
     min_val = [0, 0, 0.0001, 0]  
@@ -52,7 +52,7 @@ elif "2" in EXP:
 elif "3" in EXP:
     param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau', 'lcStrategic', 'lcCooperative', 'lcAssertive', 'lcSpeedGain']
     min_val = [25.0, 0.5, 1.0, 1.0, 0.5, 0, 0, 0.0001, 0]  
-    max_val = [40.0, 3.0, 4.0, 4.0, 2.0, 5, 1, 5,      5] 
+    max_val = [43.0, 3.0, 4.0, 4.0, 3.0, 5, 1, 5,      5] 
 if "a" in EXP:
     MEAS = "volume"
 elif "b" in EXP:
@@ -212,7 +212,7 @@ def objective(trial):
     error = np.linalg.norm(matrix_no_nan)
 
     clear_directory(os.path.join("temp", str(trial.number)))
-    logging.info(f'Trial {trial.number}: param={driver_param}, error={error}')
+    # logging.info(f'Trial {trial.number}: param={driver_param}, error={error}')
     
     return error
 
@@ -255,15 +255,18 @@ if __name__ == "__main__":
     # run_sumo(sim_config=SCENARIO+".sumocfg")
 
     # ================================= Create a study object and optimize the objective function
-    clear_directory("temp")
+    # clear_directory("temp")
     current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     logging.basicConfig(filename=f'{current_time}_optuna_log_{EXP}_{N_TRIALS}_{N_JOBS}.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
 
     sampler = optuna.samplers.TPESampler(seed=10)
     study = optuna.create_study(direction='minimize', sampler=sampler)
     study.optimize(objective, n_trials=N_TRIALS, n_jobs=N_JOBS, callbacks=[logging_callback])
-    fig = optuna.visualization.plot_optimization_history(study)
-    fig.show()
+    try:
+        fig = optuna.visualization.plot_optimization_history(study)
+        fig.show()
+    except:
+        pass
 
     # Get the best parameters
     best_params = study.best_params

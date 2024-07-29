@@ -8,17 +8,11 @@ import pickle
 from matplotlib.ticker import FuncFormatter
 import datetime
 
-def reorder_by_id(trajectory_file, bylane="mainline"):
+def reorder_by_id(trajectory_file, link_names="all", lane_name=""):
     # read the trajectory file to see if it is ordered by time (time increases from previous row)
     # assumption: trajectory_file is either ordered by time or by vehicleID
     # separate files by laneID if bylane is True
-    mainline = ["E0_1", "E0_2", "E0_3", "E0_4",
-                "E1_2", "E1_3", "E1_4", "E1_5",
-                "E3_1", "E3_2", "E3_3", "E3_4",
-                "E5_0", "E5_1", "E5_2", "E5_3",
-                "E7_1", "E7_2", "E7_3", "E7_4",
-                "E8_0", "E8_1", "E8_2", "E8_3"
-                ] # since ASM is only processed on lane 1-4 (SUMO reversed lane idx)
+    
     prev_time = -1
     ordered_by_time = True
     with open(trajectory_file, mode='r') as file:
@@ -51,34 +45,27 @@ def reorder_by_id(trajectory_file, bylane="mainline"):
             # print(csv_reader)
             rows = [row[0].strip().split() for row in csv_reader]
         # Sort the rows by vehicleID and then by time within each vehicleID
+        print("Start time: ", rows[0][1])
+        print("End time: ", rows[-1][1])
+        print("Start pos: ", rows[0][3]) # TODO may not be accurate
+        print("End pos: ", rows[-1][3])
+
         rows.sort(key=lambda x: (x[0], float(x[1])))
 
-        if bylane==True:
-            # Organize rows by laneID
-            lanes = defaultdict(list)
-            for row in rows:
-                lane_id = row[2]  # assuming laneID is in the third column
-                lanes[lane_id].append(row)
+        # if bylane==True:
+        #     # Organize rows by laneID
+        #     lanes = defaultdict(list)
+        #     for row in rows:
+        #         lane_id = row[2]  # assuming laneID is in the third column
+        #         lanes[lane_id].append(row)
             
-            for lane_id, lane_rows in lanes.items():
-                output_file = trajectory_file.replace(".csv", f"_{lane_id}.csv")
-                with open(output_file, mode='w') as file:
-                    file.write(",".join(headers) + "\n")  # Write the headers
-                    for row in lane_rows:
-                        file.write(" ".join(str(num) for num in row) + "\n")
-
-        elif bylane == "mainline":
-            # Write the sorted rows to a new CSV file
-            output_file = trajectory_file.replace(".csv", "_mainline.csv")
-            with open(output_file, mode='w') as file:
-                # csv_writer = csv.writer(file)
-                file.write(",".join(str(num) for num in headers)+"\n")  # Write the headers
-                # csv_writer.writerows(rows)
-                for row in rows:
-                    lane_id = row[2]
-                    if lane_id in mainline:
-                        file.write(" ".join(str(num) for num in row)+"\n")
-        else:
+        #     for lane_id, lane_rows in lanes.items():
+        #         output_file = trajectory_file.replace(".csv", f"_{lane_id}.csv")
+        #         with open(output_file, mode='w') as file:
+        #             file.write(",".join(headers) + "\n")  # Write the headers
+        #             for row in lane_rows:
+        #                 file.write(" ".join(str(num) for num in row) + "\n")
+        if link_names == "all":
             # Write the sorted rows to a new CSV file
             output_file = trajectory_file.replace(".csv", "_byid.csv")
             with open(output_file, mode='w') as file:
@@ -87,9 +74,22 @@ def reorder_by_id(trajectory_file, bylane="mainline"):
                 # csv_writer.writerows(rows)
                 for row in rows:
                     file.write(" ".join(str(num) for num in row)+"\n")
+
+        else: # write selected link names
+            # Write the sorted rows to a new CSV file
+            output_file = trajectory_file.replace(".csv", f"_{lane_name}.csv")
+            with open(output_file, mode='w') as file:
+                # csv_writer = csv.writer(file)
+                file.write(",".join(str(num) for num in headers)+"\n")  # Write the headers
+                # csv_writer.writerows(rows)
+                for row in rows:
+                    lane_id = row[2]
+                    if lane_id in link_names:
+                        file.write(" ".join(str(num) for num in row)+"\n")
+
     return
 
-def compute_macro(trajectory_file, dx, dt, save=False, plot=True):
+def compute_macro(trajectory_file, dx, dt, start_time, end_time, start_pos, end_pos, save=False, plot=True):
     '''
     Compute mean speed, density and flow from trajectory data using Edie's definition
     flow Q = TTD/(dx dt)
@@ -99,8 +99,8 @@ def compute_macro(trajectory_file, dx, dt, save=False, plot=True):
     # find the spatial and temporal ranges
     start_x = 999999
     end_x = -9999999
-    start_time = 999999
-    end_time = -999999
+    t1 = 999999
+    t2 = -999999
     
     first_line = True
     with open(trajectory_file, mode='r') as input_file:
@@ -124,15 +124,15 @@ def compute_macro(trajectory_file, dx, dt, save=False, plot=True):
             curr_x = float(columns[3])
             start_x = min(start_x, curr_x)
             end_x = max(end_x, curr_x)
-            start_time = min(start_time, curr_time)
-            end_time = max(end_time, curr_time)
+            t1 = min(t1, curr_time)
+            t2 = max(t2, curr_time)
 
-    print(f"Ranges of {trajectory_file}, start: {start_time}, end: {end_time}, start_pos: {start_x}, end_pos: {end_x}")
+    print(f"Ranges of {trajectory_file}, start: {t1}, end: {t2}, start_pos: {start_x}, end_pos: {end_x}")
     
     # initialize
     prev_vehicle_id = None
     time_range = end_time - start_time
-    space_range = end_x - start_x
+    space_range = end_pos - start_pos
     TTT_matrix = np.zeros((int(time_range / dt), int( space_range / dx)))
     TTD_matrix = np.zeros((int(time_range / dt), int( space_range / dx)))
 
@@ -144,7 +144,6 @@ def compute_macro(trajectory_file, dx, dt, save=False, plot=True):
             columns = line.strip().split()
             if len(columns)==1:
                 columns = columns[0].split(',')
-
             vehicle_id = columns[0] # int(columns[0])
 
             # if first_line and not vehicle_id.isalpha(): # has all letters, then the first line is a header, skip it
@@ -164,10 +163,15 @@ def compute_macro(trajectory_file, dx, dt, save=False, plot=True):
                 data_index['time_index'] = (data_index['timestamps'] // dt)
                 grouped = data_index.groupby(['space_index', 'time_index'])
 
+                start_space_idx = data_index['space_index'].values[0]
+                start_time_idx = data_index['time_index'].values[0]
+
                 for (space, time), group_df in grouped:
-                    # print(space, time)
+                    # HAVE to add these two lines to shirt the indices to begin from 0
+                    # space -= start_space_idx
+                    # time -= start_time_idx
                     if (time >= 0 and time < (int(time_range / dt)) and space >= 0 and space < (int(space_range / dx))):
-                        
+    
                         TTD_matrix[int(time)][int(space)] += (group_df.p.max() - group_df.p.min()) # meter
                         TTT_matrix[int(time)][int(space)] += (group_df.timestamps.max() - group_df.timestamps.min()) #sec
                 # break
@@ -204,6 +208,67 @@ def compute_macro(trajectory_file, dx, dt, save=False, plot=True):
 
     return macro_data
 
+
+
+def plot_macro_sim(macro_data, dx=10, dt=10):
+    '''
+    plot heatmap of Q, Rho and V in one plot
+    '''
+    fs = 18
+    minutes = 10
+    length = int(minutes * 60/dt)
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = fs
+    fig, axs = plt.subplots(1,3, figsize=(20, 6))
+    Q, Rho, V = macro_data["flow"][:length,:], macro_data["density"][:length,:], macro_data["speed"][:length,:]
+
+    # flow
+    h = axs[0].imshow(Q.T*3600, aspect='auto',vmin=0, vmax=4000)# , vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr/lane
+    colorbar = fig.colorbar(h, ax=axs[0])
+    axs[0].set_title("Flow (vph)")
+
+    # density
+    h= axs[1].imshow(Rho.T*1609.34, aspect='auto',vmin=0, vmax=600) #, vmax=np.max(Rho.T*1000)) # 200 convert veh/m to veh/mile
+    colorbar = fig.colorbar(h, ax=axs[1])
+    axs[1].set_title("Density (veh/mile)")
+
+    # speed
+    h = axs[2].imshow(V.T * 2.23694, aspect='auto',vmin=0, vmax=60) #, vmax=110) # 110 convert m/s to mph
+    colorbar = fig.colorbar(h, ax=axs[2])
+    axs[2].set_title("Speed (mph)")
+
+    def time_formatter(x, pos):
+        # Calculate the time delta in minutes
+        minutes = 5*60 + x * xc # starts at 5am
+        # Convert minutes to hours and minutes
+        time_delta = datetime.timedelta(minutes=minutes)
+        # Convert time delta to string in HH:MM format
+        return str(time_delta)[3:]  # Remove seconds part
+
+    # Multiply x-axis ticks by a constant
+    xc = dt/60  # convert sec to min
+    yc = dx
+    for ax in axs:
+        ax.invert_yaxis()
+        # xticks = ax.get_xticks()
+        # ax.set_xticks(xticks)
+        # ax.set_xticklabels(["{:.1f}".format(5 + tick * xc /60) for tick in xticks])
+        ax.xaxis.set_major_formatter(FuncFormatter(time_formatter))
+        # ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
+        # ax.xaxis.set_major_formatter(FuncFormatter(time_formatter))
+        yticks = ax.get_yticks()
+        # ax.set_yticks(yticks)
+        ax.set_yticklabels([str(int(tick * yc)) for tick in yticks])
+        # ax.set_yticklabels([str(int(tick * yc/ 1609.34)) for tick in yticks])
+        ax.set_ylabel("Position (m)")
+        ax.set_xlabel("Time (min)")
+        
+    plt.tight_layout()
+    plt.show()
+
+
+
+
 def plot_macro(macro_data, dx=10, dt=10):
     '''
     plot heatmap of Q, Rho and V in one plot
@@ -216,7 +281,7 @@ def plot_macro(macro_data, dx=10, dt=10):
     Q, Rho, V = macro_data["flow"][:length,:], macro_data["density"][:length,:], macro_data["speed"][:length,:]
 
     # flow
-    h = axs[0].imshow(Q.T*3600, aspect='auto',vmin=0, vmax=8000)# , vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr
+    h = axs[0].imshow(Q.T*3600, aspect='auto',vmin=0, vmax=8000)# , vmax=np.max(Q.T*3600)) # 2000 convert veh/s to veh/hr/lane
     colorbar = fig.colorbar(h, ax=axs[0])
     axs[0].set_title("Flow (nVeh/hr)")
 
