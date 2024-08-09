@@ -9,6 +9,7 @@ from matplotlib.ticker import FuncFormatter
 import seaborn as sns
 import matplotlib.dates as mdates
 import datetime
+import csv
 
 # Path to your data file
 def scatter_time_space(data_path, file_name, highlight_leaders=False):
@@ -170,7 +171,7 @@ def plot_macro_sim_grid(macro_data, quantity, dx=10, dt=10, fig=None, axes=None,
     plt.rcParams['font.family'] = 'Times New Roman'
     plt.rcParams['font.size'] = fs
     if fig is None:
-        fig, axes = plt.subplots(3,3, figsize=(18, 13.5))
+        fig, axes = plt.subplots(3,3, figsize=(18, 14))
         axes = axes.flatten()
 
     unit_dict = {
@@ -212,9 +213,7 @@ def plot_macro_sim_grid(macro_data, quantity, dx=10, dt=10, fig=None, axes=None,
 
     ax.invert_yaxis()
     ax.xaxis.set_major_formatter(FuncFormatter(time_formatter))
-    yticks = ax.get_yticks()
     
-    ax.set_yticklabels([str(int(tick * yc)) for tick in yticks])
     if ax_idx >= 6:
         ax.set_xlabel("Time (min)")
     if ax_idx in [0,3,6]:
@@ -224,6 +223,8 @@ def plot_macro_sim_grid(macro_data, quantity, dx=10, dt=10, fig=None, axes=None,
     if ax_idx in [2,5,8]:
         colorbar.ax.set_ylabel(f"{quantity.capitalize()} ({unit_dict[quantity]})", rotation=90, labelpad=15)
     plt.tight_layout()
+    yticks = ax.get_yticks()
+    ax.set_yticklabels([str(int(tick * yc)) for tick in yticks])
     return fig, axes
 
 def plot_macro_grid(macro_data, quantity, dx=160.934, dt=30, fig=None, axes=None, ax_idx=0, label=''):
@@ -277,7 +278,7 @@ def plot_macro_grid(macro_data, quantity, dx=160.934, dt=30, fig=None, axes=None
     ax = axes[ax_idx]
 
     ax.invert_yaxis()
-    ax.xaxis.set_major_formatter(FuncFormatter(time_formatter))
+    
     
     if ax_idx >= 6:
         ax.set_xlabel("Time (hour of day)")
@@ -291,6 +292,7 @@ def plot_macro_grid(macro_data, quantity, dx=160.934, dt=30, fig=None, axes=None
     plt.tight_layout()
     yticks = ax.get_yticks()
     ax.set_yticklabels(["{:.1f}".format(57.6- tick * yc / 1609.34 ) for tick in yticks])
+    ax.xaxis.set_major_formatter(FuncFormatter(time_formatter))
 
     return fig, axes
 
@@ -702,37 +704,68 @@ def plot_line_detectors_sim(sumo_dir, measurement_locations, quantity="volume", 
 
 def plot_line_detectors(sumo_dir, measurement_locations, quantity="volume", fig=None, axes=None, label=''):
     '''
-    sumo_dir: directory for DETECTOR.out.xml files
+    sumo_dir: directory for DETECTOR_EXP.csv files
     measurement_locations: a list of detectors
     quantity: "volume", "speed" or "occupancy"
     '''
     fs = 20
     plt.rcParams['font.family'] = 'Times New Roman'
     plt.rcParams['font.size'] = fs
-
+    start_time = pd.Timestamp('05:00')  # 5:00 AM
+    time_interval = 300  # seconds
 
     # Read and extract data
-    if label == "gt":
-        sim_dict = reader.extract_sim_meas(measurement_locations=measurement_locations, file_dir=sumo_dir) #gt
+    if label == "RDS":
+        sim_dict = reader.rds_to_matrix(rds_file=sumo_dir, det_locations=measurement_locations)
+        # sim_dict["flow"] = sim_dict.pop('volume')
+        # sim_dict["density"] = sim_dict["flow"]/sim_dict["speed"]
+        start_idx = int(5*3600/time_interval)
     else:
-        sim_dict = reader.extract_sim_meas(measurement_locations=["trial_" + location for location in measurement_locations], file_dir=sumo_dir)
-    
+        #     sim_dict = reader.extract_sim_meas(measurement_locations=["trial_" + location for location in measurement_locations], file_dir=sumo_dir)
+        start_idx = 0
+        column_names = ["flow", "speed"]
+        sim_dict = {column_name: [] for column_name in column_names}
+        for meas in measurement_locations:
+            flow_arr = []
+            speed_arr = []
+            filename = os.path.join(sumo_dir, f"det_{meas}_{label}.csv")
+            with open(filename, mode='r') as file:
+                csvreader = csv.DictReader(file)
+                
+                for row in csvreader:
+                    # for column_name in column_names:
+                        # data_dict[column_name].append(float(row[column_name]))
+                    flow_arr.append(float(row["flow"]))
+                    speed_arr.append(float(row["speed"]))
+            sim_dict['flow'].append(flow_arr)
+            sim_dict['speed'].append(speed_arr)
+
+        for key in sim_dict.keys():
+            sim_dict[key] = np.array(sim_dict[key]) #n_det x n_time
+
+        sim_dict['speed']*=  2.23694 # to mph
+        sim_dict['density'] = sim_dict['flow'] / sim_dict['speed']
+
+    num_points = min(len(sim_dict[quantity][0, :]), int(3*3600/time_interval))
+    time_index_rds = pd.date_range(start=start_time, periods=num_points, freq=f'{time_interval}s')
+
+    # print(data_dict)
     unit_dict = {
         "speed": "mph",
-        "volume": "vphpl",
-        "occupancy": "%"
+        "flow": "vphpl",
+        "density": "veh/mi/lane"
     }
     max_dict = {
-        "speed": 60,
-        "volume": 2400,
-        "occupancy": 100
+        "speed": 90,
+        "flow": 2400,
+        "density": 150
     }
     
     num_points_rds = len(sim_dict[quantity][0, :])
 
     # Create a grid of subplots
     if fig is None:
-        fig, axes = plt.subplots(nrows=5, ncols=5, figsize=(20, 18))
+        fig, axes = plt.subplots(nrows=5, ncols=4, figsize=(20, 18))
 
     axes = axes.flatten()
     # Determine the y-axis range across all plots
@@ -741,20 +774,25 @@ def plot_line_detectors(sumo_dir, measurement_locations, quantity="volume", fig=
 
     for i, det in enumerate(measurement_locations):
         ax = axes[i]
-        ax.plot(sim_dict[quantity][i, :], linestyle='--', marker='o', label=label)
-        parts = det.split("_")
-        title = f"{parts[0].capitalize()} lane {int(parts[1]) + 1}"
-        ax.set_title(title, fontsize=fs)
+        # ax.plot(sim_dict[quantity][i, :], linestyle='--', marker='o', label=label)
+        ax.plot(time_index_rds, sim_dict[quantity][i,start_idx:start_idx+num_points],  linestyle='--', marker='o', label=label)
+
+        parts = det.split('_')
+        ax.set_title( f"MM{parts[0]}.{parts[1]} lane {int(parts[2])+1}", fontsize=fs)
         ax.set_ylim(y_min, y_max)
-        ax.set_xlabel("Time (min)")
-        ax.set_xticks(range(0, num_points_rds, 2))
-        if i in [0,3]:
+        ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
+        ax.xaxis.set_major_locator(plt.matplotlib.dates.HourLocator(interval=1))
+        if i%4 == 0:
             ax.set_ylabel(f"{quantity.capitalize()} ({unit_dict[quantity]})")
-    
-    axes[2].legend(loc='upper left', bbox_to_anchor=(1, 1))
+        if i>=16:
+            ax.set_xlabel("Time (hour of day)")
+    #   
 
     # Adjust the layout to make room for the legends
+    axes[3].legend(loc='upper left', bbox_to_anchor=(1, 1))
     plt.tight_layout(rect=[0, 0, 1, 1])
+    # axes[0].legend()
+    # plt.tight_layout()
     return fig, axes
 
 def read_asm(asm_file):

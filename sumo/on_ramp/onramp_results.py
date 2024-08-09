@@ -60,21 +60,25 @@ def training_rmse(exp_name):
 
     # Read and extract data
     print("Training RMSE (detectors)")
+    sim1_dict = reader.extract_sim_meas(measurement_locations=[location for location in measurement_locations], file_dir=sumo_dir)
     sim2_dict = reader.extract_sim_meas(measurement_locations=["trial_" + location for location in measurement_locations], file_dir=sumo_dir)
 
-    size = sim1_dict["volume"].size
+    sim1_dict["speed"]*=3.6
+    sim2_dict["speed"]*=3.6
+    sim1_dict["density"] = sim1_dict["volume"]/sim1_dict["speed"]
+    sim2_dict["density"] = sim2_dict["volume"]/sim2_dict["speed"]
 
-    arr_without_nan = np.nan_to_num((sim1_dict["volume"] - sim2_dict["volume"]), nan=0.0)
-    norm = np.linalg.norm(arr_without_nan)/size
-    print("Volume q: {:.2f}".format(norm))  #convert veh/s to veh/hr
+    diff = sim1_dict["volume"] - sim2_dict["volume"]
+    error = np.sqrt(np.nanmean(diff.flatten()**2))
+    print("Volume q (vph): {:.2f}".format(error))  #convert veh/s to veh/hr
           
-    arr_without_nan = np.nan_to_num((sim1_dict["speed"] - sim2_dict["speed"]), nan=0.0)
-    norm = np.linalg.norm(arr_without_nan)*3.6/size
-    print("Speed v: {:.2f}".format(norm)) # km/hr 
+    diff = sim1_dict["speed"] - sim2_dict["speed"]
+    error = np.sqrt(np.nanmean(diff.flatten()**2))
+    print("Speed v (km/hr): {:.2f}".format(error)) # km/hr 
 
-    arr_without_nan = np.nan_to_num((sim1_dict["occupancy"] - sim2_dict["occupancy"]), nan=0.0)
-    norm = np.linalg.norm(arr_without_nan) /size
-    print("Occupancy occ: {:.2f}".format(norm)) # convert veh/m to veh/km
+    diff = sim1_dict["density"] - sim2_dict["density"]
+    error = np.sqrt(np.nanmean(diff.flatten()**2))
+    print("Density rho (veh/km): {:.2f}".format(error))
 
     return
 
@@ -83,22 +87,25 @@ def validation_rmse(exp_name):
     with open(exp[exp_name], 'rb') as file:
         macro_sim = pickle.load(file)
 
-    size = macro_gt["flow"].size
     print("Validation RMSE (macro simulation data)")
-    # print(macro_gt["speed"] - macro_sim["speed"])
-    arr_without_nan = np.nan_to_num((macro_gt["flow"] - macro_sim["flow"])*3600, nan=0.0)
-    norm = np.linalg.norm(arr_without_nan)/size
-    print("Volume q: {:.2f}".format(norm))  #convert veh/s to veh/hr
-          
-    arr_without_nan = np.nan_to_num((macro_gt["speed"] - macro_sim["speed"]), nan=0.0)
-    norm = np.linalg.norm(arr_without_nan)*3.6/size
-    print("Speed v: {:.2f}".format(norm)) # km/hr 
+    size1 = min(macro_gt["flow"].shape[0], macro_sim["flow"].shape[0])
+    size2 = min(macro_gt["flow"].shape[1], macro_sim["flow"].shape[1])
 
-    arr_without_nan = np.nan_to_num((macro_gt["density"] - macro_sim["density"]), nan=0.0)
-    norm = np.linalg.norm(arr_without_nan) * 1000/size
-    print("Density rho: {:.2f}".format(norm)) # convert veh/m to veh/km
+    diff = (macro_gt["flow"][:size1,:size2] - macro_sim["flow"][:size1,:size2])*3600
+    error = np.sqrt(np.nanmean(diff.flatten()**2))
+    print("Volume q (vph): {:.2f}".format(error))  #convert veh/s to veh/hr
+
+    diff = (macro_gt["speed"][:size1,:size2] - macro_sim["speed"][:size1,:size2])*3.6
+    error = np.sqrt(np.nanmean(diff.flatten()**2))
+    print("Speed v (km/hr): {:.2f}".format(error)) # km/hr 
+
+    diff = (macro_gt["density"][:size1,:size2] - macro_sim["density"][:size1,:size2])*1000
+    error = np.sqrt(np.nanmean(diff.flatten()**2))
+    print("Density rho (veh/km): {:.2f}".format(error))
 
     return
+
+
 
 def read_opt_result(result_pkl):
     with open(result_pkl, 'rb') as file:
@@ -116,16 +123,21 @@ if __name__ == "__main__":
                              'downstream_0', 'downstream_1']
     
     onramp.update_sumo_configuration(best_param_map["default"])
-    onramp.run_sumo(sim_config = "onramp.sumocfg")
+    # onramp.run_sumo(sim_config = "onramp.sumocfg")
     # onramp.run_sumo(sim_config = "onramp_gt.sumocfg")
     # ground truth detector data
     # sim1_dict = reader.extract_sim_meas(measurement_locations=measurement_locations, file_dir=sumo_dir)
         
-    # with open(exp["gt"], 'rb') as file:
-    #     macro_gt = pickle.load(file)
-
-    # training_rmse(None)
-    # validation_rmse("default")
+#     with open(exp["gt"], 'rb') as file:
+#         macro_gt = pickle.load(file)
+# # "default","1a", "1b", "1c","2a","2b","2c","3a","3b",
+#     for i, exp_label in enumerate(["3b", "3c"]):
+#         onramp.update_sumo_configuration(best_param_map["default"])
+#         onramp.update_sumo_configuration(best_param_map[exp_label])
+#         onramp.run_sumo(sim_config = "onramp.sumocfg")
+#         print(exp_label)
+#         training_rmse(exp_label)
+#         validation_rmse(exp_label)
 
     # result_pkl = r'C:\Users\yanbing.wang\Documents\traffic\sumo\on_ramp\optuna_studies\result.pkl'
     # read_opt_result(result_pkl)
@@ -148,12 +160,13 @@ if __name__ == "__main__":
     # plt.show()
     
     # ============ plot time-space macroscopic grid 3x3 ===============
-    # quantity = "density"
-    # for i, exp_label in enumerate(["1a", "1b", "1c","2a","2b","2c","3a","3b","3c"]):
-    #     with open(exp[exp_label], 'rb') as file:
-    #         macro_sim = pickle.load(file)
-    #     fig, axes = vis.plot_macro_sim_grid(macro_sim, quantity, dx=10, dt=10, fig=fig, axes=axes, ax_idx=i, label=exp_label)
-    # plt.show()
+    quantity = "speed"
+    for i, exp_label in enumerate(["1a", "1b", "1c","2a","2b","2c","3a","3b","3c"]):
+        with open(exp[exp_label], 'rb') as file:
+            macro_sim = pickle.load(file)
+        fig, axes = vis.plot_macro_sim_grid(macro_sim, quantity, dx=10, dt=10, fig=fig, axes=axes, ax_idx=i, label=exp_label)
+    plt.savefig(rf'C:\Users\yanbing.wang\Documents\traffic\figures\i24-calibration\synth_macro_{quantity}.png')
+    plt.show()
 
     # ============ plot macroscopic 3x1 ==========
 

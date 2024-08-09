@@ -7,8 +7,7 @@ simulation_result/*
 *.out.xml
 *.pkl
 *.txt
+*.out.xml
+config.json
 **/temp/
-/sumo/I24scenario/trajs_best.xml
-/sumo/I24scenario/trajs_gt.xml
-/sumo/on_ramp/trajs_best.xml
-/sumo/on_ramp/trajs_gt.xml
+**/_log/

@@ -19,9 +19,9 @@ import macro
 
 # ================ I24 scenario ====================
 SCENARIO = "I24_scenario"
-EXP = "2c"
-N_TRIALS = 10000 # optimization trials
-N_JOBS = 16 # cores
+EXP = "3c"
+N_TRIALS = 15000 # optimization trials
+N_JOBS = 32 # cores
 
 computer_name = os.environ.get('COMPUTERNAME', 'Unknown')
 if "CSI" in computer_name:
@@ -41,6 +41,14 @@ measurement_locations = [
                          '55_3_0', '55_3_1', '55_3_2', '55_3_3',
                          '54_6_0', '54_6_1', '54_6_2', '54_6_3',
                          '54_1_0', '54_1_1', '54_1_2', '54_1_3' ]
+
+initial_guesses = {'maxSpeed': 31.534820558874827, 'minGap': 1.860096631767026, 'accel': 1.0708978903827724, 'decel': 3.8918676775882215, 'tau': 1.7949543267839752, 'lcStrategic': 1.414,
+                    'lcCooperative': 1.0,
+                    'lcAssertive': 1.0,
+                    'lcSpeedGain': 3.76,
+                    'lcKeepRight': 0.0,
+                    'lcOvertakeRight': 0.877}
+
 if "1" in EXP:
     param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau']
     min_val = [25.0, 0.5, 1.0, 1.0, 0.5]  
@@ -60,6 +68,7 @@ elif "b" in EXP:
 elif "c" in EXP:
     MEAS = "occupancy"
 
+initial_guess = {key: initial_guesses[key] for key in param_names if key in initial_guesses}
 
 default_params =  {'maxSpeed': 34.91628705652602,
                     'minGap': 2.9288888706657783,
@@ -205,22 +214,20 @@ def objective(trial):
     
     # Calculate the objective function value
     diff = simulated_output[MEAS][:,:end_idx] - measured_output[MEAS][:, start_idx: end_idx_rds] # measured output may have nans
-    mask = ~np.isnan(diff)
-
-    # Replace NaNs with 0 in the matrix for norm calculation
-    matrix_no_nan = np.where(mask, diff, 0)
-    error = np.linalg.norm(matrix_no_nan)
-
+    # mask = ~np.isnan(diff)
+    # matrix_no_nan = np.where(mask, diff, 0)
+    # error = np.linalg.norm(matrix_no_nan)
+    error = np.sqrt(np.nanmean(diff.flatten()**2))
     clear_directory(os.path.join("temp", str(trial.number)))
     # logging.info(f'Trial {trial.number}: param={driver_param}, error={error}')
     
     return error
 
 def logging_callback(study, trial):
-    if trial.state == optuna.trial.TrialState.COMPLETE:
-        logging.info(f'Trial {trial.number} succeeded: value={trial.value}, params={trial.params}')
-    elif trial.state == optuna.trial.TrialState.FAIL:
-        logging.error(f'Trial {trial.number} failed: exception={trial.user_attrs.get("exception")}')
+    # if trial.state == optuna.trial.TrialState.COMPLETE:
+    #     logging.info(f'Trial {trial.number} succeeded: value={trial.value}, params={trial.params}')
+    # elif trial.state == optuna.trial.TrialState.FAIL:
+    #     logging.error(f'Trial {trial.number} failed: exception={trial.user_attrs.get("exception")}')
     
     if study.best_trial.number == trial.number:
         logging.info(f'Current Best Trial: {study.best_trial.number}')
@@ -247,11 +254,11 @@ def clear_directory(directory_path):
 if __name__ == "__main__":
 
 
-    # ================================= get RDS data
+    # ================================= prepare RDS data for model calibration
     measured_output = reader.rds_to_matrix(rds_file=RDS_DIR, det_locations=measurement_locations)
 
     # ================================= run default 
-    update_sumo_configuration(default_params)
+    update_sumo_configuration(initial_guess)
     # run_sumo(sim_config=SCENARIO+".sumocfg")
 
     # ================================= Create a study object and optimize the objective function
@@ -261,13 +268,14 @@ if __name__ == "__main__":
 
     sampler = optuna.samplers.TPESampler(seed=10)
     study = optuna.create_study(direction='minimize', sampler=sampler)
+    study.enqueue_trial(initial_guess)
     study.optimize(objective, n_trials=N_TRIALS, n_jobs=N_JOBS, callbacks=[logging_callback])
     try:
         fig = optuna.visualization.plot_optimization_history(study)
         fig.show()
     except:
         pass
-
+    
     # Get the best parameters
     best_params = study.best_params
     print('Best parameters:', best_params)

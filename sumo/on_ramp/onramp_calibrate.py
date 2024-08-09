@@ -20,7 +20,7 @@ import utils_vis as vis
 
 # ================ on-ramp scenario setup ====================
 SCENARIO = "onramp"
-EXP = "1a"
+EXP = "3c"
 sumo_dir = r'C:\Users\yanbing.wang\Documents\traffic\sumo\on_ramp'
 measurement_locations = ['upstream_0', 'upstream_1', 
                             'merge_0', 'merge_1', 'merge_2', 
@@ -296,23 +296,23 @@ if __name__ == "__main__":
     # ================================= run ground truth and generate synthetic measurements
     # run_sumo(sim_config=SCENARIO+"_gt.sumocfg") #, fcd_output ="trajs_gt.xml")
     # vis.visualize_fcd("trajs_gt.xml") # lanes=["E0_0", "E0_1", "E1_0", "E1_1", "E2_0", "E2_1", "E2_2", "E4_0", "E4_1"]
-    measured_output = reader.extract_sim_meas(measurement_locations)
+    # measured_output = reader.extract_sim_meas(measurement_locations)
 
 
-    # =============================== Create a study object and optimize the objective function
-    clear_directory("temp")
-    sampler = optuna.samplers.TPESampler(seed=10)
-    pruner = optuna.pruners.SuccessiveHalvingPruner()
-    study = optuna.create_study(direction='minimize', sampler=sampler)
-    study.optimize(objective, n_trials=100, n_jobs=16, callbacks=[logging_callback])
-    fig = optuna.visualization.plot_optimization_history(study)
-    fig.show()
+    # # =============================== Create a study object and optimize the objective function
+    # clear_directory("temp")
+    # sampler = optuna.samplers.TPESampler(seed=10)
+    # pruner = optuna.pruners.SuccessiveHalvingPruner()
+    # study = optuna.create_study(direction='minimize', sampler=sampler)
+    # study.optimize(objective, n_trials=100, n_jobs=16, callbacks=[logging_callback])
+    # fig = optuna.visualization.plot_optimization_history(study)
+    # fig.show()
 
-    # Get the best parameters
-    best_params = study.best_params
-    print('Best parameters:', best_params)
-    with open(f'calibration_result/study_{EXP}.pkl', 'wb') as f:
-        pickle.dump(study, f)
+    # # Get the best parameters
+    # best_params = study.best_params
+    # print('Best parameters:', best_params)
+    # with open(f'calibration_result/study_{EXP}.pkl', 'wb') as f:
+    #     pickle.dump(study, f)
 
 
     # # ================================ visualize time-space using best parameters
@@ -329,12 +329,15 @@ if __name__ == "__main__":
     # vis.plot_sim_vs_sim(sumo_dir, measurement_locations, quantity="speed")
     
     # ============== compute & save macroscopic properties ==================
+    best_params = {'maxSpeed': 30.53284221198521, 'minGap': 2.7958695360441843, 'accel': 2.4497572915690244, 'decel': 2.4293815796265275, 'tau': 1.374376527326827, 'lcStrategic': 1.3368371035725628, 'lcCooperative': 0.9994681517674497, 'lcAssertive': 0.35088886304156547, 'lcSpeedGain': 1.901166989734572, 'lcKeepRight': 0.7531568339763854},
+
     # update_sumo_configuration(best_params)
     # base_name = SCENARIO+""
     # fcd_name = "fcd_"+base_name+"_"+EXP
     # run_sumo(sim_config = base_name+".sumocfg", fcd_output =fcd_name+".out.xml")
     # reader.fcd_to_csv_byid(xml_file=fcd_name+".out.xml", csv_file=fcd_name+".csv")
     # macro.reorder_by_id(fcd_name+".csv", bylane=False)
-    # macro_data = macro.compute_macro(fcd_name+"_byid.csv", dx=10, dt=10, save=True, plot=True)
+    fcd_name = "fcd_onramp_cflc_v"
+    macro_data = macro.compute_macro(fcd_name+"_byid.csv",  dx=10, dt=10, start_time=0, end_time=480, start_pos =0, end_pos=1300, save=True, plot=True)
 
     # vis.scatter_fcd(fcd_name+".out.xml")

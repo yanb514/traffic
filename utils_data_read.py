@@ -7,6 +7,7 @@ from matplotlib.dates import DateFormatter
 import numpy as np
 import os
 import xml.etree.ElementTree as ET
+from scipy.interpolate import interp1d
 
 def extract_mile_marker(link_name):
     "link_name: R3G-00I24-59.7W Off Ramp (280)"
@@ -57,6 +58,26 @@ def read_and_filter_file(file_path, write_file_path, startmile, endmile):
                     }
                     writer.writerow(selected_row)
 
+def interpolate_zeros(arr):
+    arr = np.array(arr)
+    interpolated_arr = arr.copy()
+    
+    for i, row in enumerate(arr):
+        zero_indices = np.where(row < 4)[0]
+        
+        if len(zero_indices) > 0:
+            # Define the x values for the valid (non-zero) data points
+            x = np.arange(len(row))
+            valid_indices = np.setdiff1d(x, zero_indices)
+            
+            if len(valid_indices) > 1:  # Ensure there are at least two points to interpolate
+                # Create the interpolation function based on valid data points
+                interp_func = interp1d(x[valid_indices], row[valid_indices], kind='linear', fill_value="extrapolate")
+                
+                # Replace the zero values with interpolated values
+                interpolated_arr[i, zero_indices] = interp_func(zero_indices)
+    
+    return interpolated_arr
 
 def rds_to_matrix(rds_file, det_locations ):
     '''
@@ -112,6 +133,11 @@ def rds_to_matrix(rds_file, det_locations ):
     macro_data["speed"] = np.vstack(macro_data["speed"]) # [N_dec, N_time]
     macro_data["volume"] = np.vstack(macro_data["volume"]) # [N_dec, N_time]
     macro_data["occupancy"] = np.vstack(macro_data["occupancy"]) # [N_dec, N_time]
+
+    # postprocessing
+    macro_data["volume"] = interpolate_zeros(macro_data["volume"])
+    macro_data["flow"] = macro_data["volume"]
+    macro_data["density"] = macro_data["flow"]/macro_data["speed"]
 
     return macro_data
 
@@ -202,6 +228,38 @@ def write_csv(data, csv_file):
         writer.writerows(data)
 
 
+def det_to_csv(xml_file, suffix=""):
+
+    # Parse the XML file
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    # Open a CSV file for writing
+    csv_file_name = xml_file.split(".")[-3]
+    with open(f'{csv_file_name}{suffix}.csv', mode='w', newline='') as file:
+        writer = csv.writer(file)
+        
+        # Write the header row
+        header = ["begin", "end", "id", "nVehContrib", "flow", "occupancy", "speed", "harmonicMeanSpeed", "length", "nVehEntered"]
+        writer.writerow(header)
+        
+        # Write the data rows
+        for interval in root.findall('interval'):
+            row = [
+                float(interval.get("begin")),
+                float(interval.get("end")),
+                interval.get("id"),
+                int(interval.get("nVehContrib")),
+                float(interval.get("flow")),
+                float(interval.get("occupancy")),
+                float(interval.get("speed")),
+                float(interval.get("harmonicMeanSpeed")),
+                float(interval.get("length")),
+                int(interval.get("nVehEntered"))
+            ]
+            writer.writerow(row)
+
+    return
 
 def fcd_to_csv_byid(xml_file, csv_file):
     print(f"parsing {xml_file}...")

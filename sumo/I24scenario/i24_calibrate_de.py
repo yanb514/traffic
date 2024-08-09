@@ -46,6 +46,13 @@ measurement_locations = [
                          '55_3_0', '55_3_1', '55_3_2', '55_3_3',
                          '54_6_0', '54_6_1', '54_6_2', '54_6_3',
                          '54_1_0', '54_1_1', '54_1_2', '54_1_3' ]
+
+initial_guesses = {'maxSpeed': 31.534820558874827, 'minGap': 1.860096631767026, 'accel': 1.0708978903827724, 'decel': 3.8918676775882215, 'tau': 1.7949543267839752, 'lcStrategic': 1.414,
+                    'lcCooperative': 1.0,
+                    'lcAssertive': 1.0,
+                    'lcSpeedGain': 3.76,
+                    'lcKeepRight': 0.0,
+                    'lcOvertakeRight': 0.877}
 if "1" in EXP:
     param_names = ['maxSpeed', 'minGap', 'accel', 'decel', 'tau']
     min_val = [25.0, 0.5, 1.0, 1.0, 0.5]  
@@ -76,6 +83,8 @@ default_params =  {'maxSpeed': 34.91628705652602,
                     'lcSpeedGain': 3.76,
                     'lcKeepRight': 0.0,
                     'lcOvertakeRight': 0.877}
+
+initial_guess = [initial_guesses[key] for key in param_names]
 
 # Set up logging
 # current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -267,7 +276,7 @@ if __name__ == "__main__":
     measured_output = reader.rds_to_matrix(rds_file=RDS_DIR, det_locations=measurement_locations)
 
     # ================================= run default 
-    update_sumo_configuration(default_params)
+    update_sumo_configuration(initial_guesses)
     # run_sumo(sim_config=SCENARIO+".sumocfg")
 
     # ================================= Create a study object and optimize the objective function
@@ -276,6 +285,7 @@ if __name__ == "__main__":
                                           measured_output=measured_output, logger=logger)
     bounds = [(min_val[i], max_val[i]) for i, _ in enumerate(param_names)]
     result = differential_evolution(wrapped_objective, bounds, 
+                                    x0 = initial_guess,
                                     maxiter=MAXITER, popsize=POPSIZE, workers=lambda f, p: parallel_evaluation(f, p, NUM_WORKERS), callback=log_progress)
     print("Optimization result:", result)
     print("Best parameters found:", result.x)
